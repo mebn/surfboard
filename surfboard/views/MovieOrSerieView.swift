@@ -1,0 +1,31 @@
+//
+//  MovieOrSerieView.swift
+//  surfboard
+//
+//  Created by Marcus Nilszén on 2025-12-25.
+//
+
+import SwiftUI
+
+struct MovieOrSerieView: View {
+    let item: MediaItem
+    
+    var body: some View {
+        VStack(spacing: 40) {
+            MediaCard(item: item)
+            
+            Text(item.name)
+                .font(.title)
+            
+            NavigationLink(destination: LinkSelectView()) {
+                Text("Play")
+            }
+        }
+        .padding(60)
+        .toolbar(.hidden, for: .tabBar)
+    }
+}
+
+#Preview {
+    MovieOrSerieView(item: MediaItem(id: "tt0111161", type: "movie", name: "The Shawshank Redemption", poster: "https://images.metahub.space/poster/medium/tt0111161/img"))
+}

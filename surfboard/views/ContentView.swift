@@ -9,33 +9,25 @@ import SwiftUI
 import SwiftData
 
 struct ContentView: View {
-    @State private var selectedTab = 0
-    
     var body: some View {
-        TabView(selection: $selectedTab) {
-            HomeView()
-                .tabItem {
-                    Label("Home", systemImage: "house.fill")
+        NavigationStack {
+            TabView() {
+                Tab("Home", systemImage: "house.fill") {
+                    HomeView()
                 }
-                .tag(0)
-            
-            SearchView()
-                .tabItem {
-                    Label("Search", systemImage: "magnifyingglass")
+                
+                Tab("Search", systemImage: "magnifyingglass") {
+                    SearchView()
                 }
-                .tag(1)
-            
-            LibraryView()
-                .tabItem {
-                    Label("Library", systemImage: "rectangle.stack.fill")
+                
+                Tab("Library", systemImage: "rectangle.stack.fill") {
+                    LibraryView()
                 }
-                .tag(2)
-            
-            SettingsView()
-                .tabItem {
-                    Label("Settings", systemImage: "gearshape.fill")
+                
+                Tab("Settings", systemImage: "gearshape.fill") {
+                    SettingsView()
                 }
-                .tag(3)
+            }
         }
     }
 }
