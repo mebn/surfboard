@@ -13,6 +13,7 @@ struct SourcesView: View {
     @State private var streams: [TorrentStream] = []
     @State private var isLoading = true
     @State private var errorMessage: String?
+    @State private var selectedStream: TorrentStream?
     
     var body: some View {
         Group {
@@ -43,7 +44,11 @@ struct SourcesView: View {
                 .listStyle(.grouped)
             }
         }
-        .navigationTitle("Sources for \(item.name)")
+        .navigationDestination(item: $selectedStream) { stream in
+            if let urlString = stream.url, let url = URL(string: urlString) {
+                VideoPlayerView(url: url, title: item.name)
+            }
+        }
         .task {
             await loadStreams()
         }
@@ -62,9 +67,8 @@ struct SourcesView: View {
     }
     
     private func handleStreamTap(_ stream: TorrentStream) {
-        print("Selected stream: \(stream.displayTitle)")
-        print("URL: \(stream.url ?? "N/A")")
-        print("InfoHash: \(stream.infoHash ?? "N/A")")
+        guard stream.url != nil else { return }
+        selectedStream = stream
     }
 }
 
@@ -118,6 +122,6 @@ struct StreamRow: View {
 
 #Preview {
     NavigationStack {
-        SourcesView(item: MediaItem(id: "tt0111161", type: "movie", name: "The Shawshank Redemption", poster: nil))
+        SourcesView(item: .preview())
     }
 }

@@ -1,8 +1,0 @@
-//
-//  Secrets.xcconfig
-//  surfboard
-//
-//  Created by Marcus Nilszén on 2025-12-26.
-//
-
-TORRENTIO_BASE_URL="https://torrentio.strem.fun/debridoptions=nodownloadlinks,nocatalog|realdebrid=2PLGJLJFEBDGSGIQWHD4U2MZXKMHNWD6K5TWJEUCCTLWNPIRIEVQ"

@@ -22,5 +22,5 @@ struct MediaCard: View {
 }
 
 #Preview {
-    MediaCard(item: MediaItem(id: "tt0111161", type: "movie", name: "The Shawshank Redemption", poster: "https://images.metahub.space/poster/medium/tt0111161/img"))
+    MediaCard(item: .preview(poster: "https://images.metahub.space/poster/medium/tt0111161/img"))
 }

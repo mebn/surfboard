@@ -1,3 +1,3 @@
 # Surfboard
 
-a stremio alternative for tvOS.
+A stremio alternative for tvOS
