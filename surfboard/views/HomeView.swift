@@ -54,7 +54,7 @@ struct MediaSection: View {
                 ScrollView(.horizontal) {
                     HStack(spacing: 40) {
                         ForEach(items) { item in
-                            NavigationLink(destination: MovieOrSerieView(item: item)) {
+                            NavigationLink(destination: SingleMediaView(item: item)) {
                                 MediaCard(item: item)
                                     .containerRelativeFrame(.horizontal, count: 6, spacing: 40)
                             }
