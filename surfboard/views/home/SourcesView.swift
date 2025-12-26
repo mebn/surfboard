@@ -9,6 +9,12 @@ import SwiftUI
 
 struct SourcesView: View {
     let item: MediaItem
+    let episode: Episode?
+    
+    init(item: MediaItem, episode: Episode? = nil) {
+        self.item = item
+        self.episode = episode
+    }
     
     @State private var streams: [TorrentStream] = []
     @State private var isLoading = true
@@ -44,9 +50,10 @@ struct SourcesView: View {
                 .listStyle(.grouped)
             }
         }
+        .navigationTitle(navigationTitle)
         .navigationDestination(item: $selectedStream) { stream in
             if let urlString = stream.url, let url = URL(string: urlString) {
-                VideoPlayerView(url: url, title: item.name)
+                VideoPlayerView(url: url, title: navigationTitle)
             }
         }
         .task {
@@ -54,11 +61,26 @@ struct SourcesView: View {
         }
     }
     
+    private var navigationTitle: String {
+        if let episode = episode {
+            return "\(item.name) - S\(episode.season)E\(episode.episodeNumber)"
+        }
+        return item.name
+    }
+    
+    private var streamId: String {
+        if let episode = episode {
+            // For series episodes, use the episode ID (e.g., "tt1234567:1:1" format)
+            return episode.id
+        }
+        return item.id
+    }
+    
     private func loadStreams() async {
         do {
             streams = try await TorrentioService.shared.fetchStreams(
                 type: item.type,
-                id: item.id
+                id: streamId
             )
         } catch {
             errorMessage = error.localizedDescription

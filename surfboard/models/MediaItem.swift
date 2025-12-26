@@ -170,7 +170,7 @@ struct Episode: Codable, Identifiable, Hashable {
     let description: String?
     let thumbnail: String?
     let tvdbId: Int?
-    let rating: String?
+    let rating: Double?
     
     enum CodingKeys: String, CodingKey {
         case id, name, season, number, episode
