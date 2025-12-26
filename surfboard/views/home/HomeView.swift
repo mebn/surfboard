@@ -18,12 +18,10 @@ struct HomeView: View {
                 await loadContent()
             }
         } else {
-            NavigationStack {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 40) {
-                        MediaSection(title: "Popular Movies", items: popularMovies)
-                        MediaSection(title: "Popular TV Shows", items: popularTVShows)
-                    }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 40) {
+                    MediaSection(title: "Popular Movies", items: popularMovies)
+                    MediaSection(title: "Popular TV Shows", items: popularTVShows)
                 }
             }
         }
@@ -54,7 +52,7 @@ struct MediaSection: View {
                 ScrollView(.horizontal) {
                     HStack(spacing: 40) {
                         ForEach(items) { item in
-                            NavigationLink(destination: SingleMediaView(item: item)) {
+                            NavigationLink(destination: SingleMediaView(itemId: item.id, itemType: item.type)) {
                                 MediaCard(item: item)
                                     .containerRelativeFrame(.horizontal, count: 6, spacing: 40)
                             }

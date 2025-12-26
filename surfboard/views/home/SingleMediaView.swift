@@ -8,11 +8,43 @@
 import SwiftUI
 
 struct SingleMediaView: View {
-    let item: MediaItem
+    let itemId: String
+    let itemType: String
     
+    @State private var item: MediaItem?
+    @State private var isLoading = true
     @State private var selectedSeason: Int = 1
     
     var body: some View {
+        Group {
+            if isLoading {
+                ProgressView()
+            } else if let item = item {
+                mediaContent(item: item)
+            } else {
+                ContentUnavailableView("Error", systemImage: "exclamationmark.triangle", description: Text("Failed to load content"))
+            }
+        }
+        .task {
+            await loadItem()
+        }
+        .toolbar(.hidden, for: .tabBar)
+    }
+    
+    private func loadItem() async {
+        do {
+            item = try await CinemetaService.shared.fetchMediaDetails(type: itemType, id: itemId)
+            if let firstSeason = item?.seasons.first {
+                selectedSeason = firstSeason
+            }
+        } catch {
+            print("Error loading item: \(error)")
+        }
+        isLoading = false
+    }
+    
+    @ViewBuilder
+    private func mediaContent(item: MediaItem) -> some View {
         HStack(alignment: .top, spacing: 40) {
             // Left side: Poster and info
             VStack(spacing: 20) {
@@ -40,17 +72,12 @@ struct SingleMediaView: View {
                             }
                         }
                         .pickerStyle(.menu)
-                        .onAppear {
-                            if let firstSeason = item.seasons.first {
-                                selectedSeason = firstSeason
-                            }
-                        }
                     }
                     
                     // Episodes list
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 12) {
-                            ForEach(episodesForSelectedSeason) { episode in
+                            ForEach(episodesForSelectedSeason(item: item)) { episode in
                                 NavigationLink(destination: SourcesView(item: item, episode: episode)) {
                                     EpisodeRow(episode: episode)
                                 }
@@ -63,10 +90,9 @@ struct SingleMediaView: View {
             }
         }
         .padding(60)
-        .toolbar(.hidden, for: .tabBar)
     }
     
-    private var episodesForSelectedSeason: [Episode] {
+    private func episodesForSelectedSeason(item: MediaItem) -> [Episode] {
         item.episodesBySeason[selectedSeason]?.sorted { $0.episodeNumber < $1.episodeNumber } ?? []
     }
 }
@@ -134,5 +160,5 @@ struct EpisodeRow: View {
 }
 
 #Preview {
-    SingleMediaView(item: .preview(poster: "https://images.metahub.space/poster/medium/tt0111161/img"))
+    SingleMediaView(itemId: "tt0111161", itemType: "movie")
 }

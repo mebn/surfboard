@@ -143,7 +143,5 @@ struct StreamRow: View {
 }
 
 #Preview {
-    NavigationStack {
-        SourcesView(item: .preview())
-    }
+    SourcesView(item: .preview())
 }

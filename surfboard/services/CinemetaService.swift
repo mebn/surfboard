@@ -27,4 +27,31 @@ class CinemetaService {
         let response = try JSONDecoder().decode(CinemetaCatalogResponse.self, from: data)
         return response.metas
     }
+    
+    func searchMovies(query: String) async throws -> [MediaItem] {
+        guard let encodedQuery = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
+            return []
+        }
+        let url = URL(string: "\(baseURL)/catalog/movie/top/search=\(encodedQuery).json")!
+        let (data, _) = try await URLSession.shared.data(from: url)
+        let response = try JSONDecoder().decode(CinemetaCatalogResponse.self, from: data)
+        return response.metas
+    }
+    
+    func searchSeries(query: String) async throws -> [MediaItem] {
+        guard let encodedQuery = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
+            return []
+        }
+        let url = URL(string: "\(baseURL)/catalog/series/top/search=\(encodedQuery).json")!
+        let (data, _) = try await URLSession.shared.data(from: url)
+        let response = try JSONDecoder().decode(CinemetaCatalogResponse.self, from: data)
+        return response.metas
+    }
+    
+    func fetchMediaDetails(type: String, id: String) async throws -> MediaItem {
+        let url = URL(string: "\(baseURL)/meta/\(type)/\(id).json")!
+        let (data, _) = try await URLSession.shared.data(from: url)
+        let response = try JSONDecoder().decode(CinemetaMetaResponse.self, from: data)
+        return response.meta
+    }
 }

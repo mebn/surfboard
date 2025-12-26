@@ -7,8 +7,35 @@
 
 import Foundation
 
+/// A type that can decode both String and numeric JSON values as a String
+struct FlexibleString: Codable, Hashable {
+    let value: String
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let stringValue = try? container.decode(String.self) {
+            value = stringValue
+        } else if let intValue = try? container.decode(Int.self) {
+            value = String(intValue)
+        } else if let doubleValue = try? container.decode(Double.self) {
+            value = String(doubleValue)
+        } else {
+            throw DecodingError.typeMismatch(String.self, DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Expected String, Int, or Double"))
+        }
+    }
+    
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(value)
+    }
+}
+
 struct CinemetaCatalogResponse: Codable {
     let metas: [MediaItem]
+}
+
+struct CinemetaMetaResponse: Codable {
+    let meta: MediaItem
 }
 
 struct MediaItem: Codable, Identifiable, Hashable {
@@ -170,7 +197,7 @@ struct Episode: Codable, Identifiable, Hashable {
     let description: String?
     let thumbnail: String?
     let tvdbId: Int?
-    let rating: Double?
+    let rating: FlexibleString?
     
     enum CodingKeys: String, CodingKey {
         case id, name, season, number, episode
