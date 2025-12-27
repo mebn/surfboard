@@ -6,20 +6,70 @@
 //
 
 import SwiftUI
+import SwiftData
 import KSPlayer
 
 struct VideoPlayerView: View {
     let url: URL
     let title: String
+    let startTime: TimeInterval
+    
+    // Metadata for progress tracking
+    let itemId: String
+    let itemType: String
+    let itemName: String
+    let itemPoster: String?
+    let episodeId: String?
+    let episodeSeason: Int?
+    let episodeNumber: Int?
+    let episodeName: String?
+    let episodeThumbnail: String?
+    let streamUrl: String
+    
+    init(
+        url: URL,
+        title: String,
+        startTime: TimeInterval = 0,
+        itemId: String = "",
+        itemType: String = "",
+        itemName: String = "",
+        itemPoster: String? = nil,
+        episodeId: String? = nil,
+        episodeSeason: Int? = nil,
+        episodeNumber: Int? = nil,
+        episodeName: String? = nil,
+        episodeThumbnail: String? = nil,
+        streamUrl: String = ""
+    ) {
+        self.url = url
+        self.title = title
+        self.startTime = startTime
+        self.itemId = itemId
+        self.itemType = itemType
+        self.itemName = itemName
+        self.itemPoster = itemPoster
+        self.episodeId = episodeId
+        self.episodeSeason = episodeSeason
+        self.episodeNumber = episodeNumber
+        self.episodeName = episodeName
+        self.episodeThumbnail = episodeThumbnail
+        self.streamUrl = streamUrl.isEmpty ? url.absoluteString : streamUrl
+    }
+    
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
     
     @StateObject private var coordinator = KSVideoPlayer.Coordinator()
     @State private var isMaskShow = false
     @State private var hideTask: Task<Void, Never>?
     @State private var scrubPosition: Double = 0
     @State private var isScrubbing = false
+    @State private var hasSeekToStartTime = false
+    @State private var progressSaveTask: Task<Void, Never>?
     @FocusState private var focusedElement: PlayerFocusElement?
     
     private let seekInterval: Int = 10
+    private let progressSaveInterval: UInt64 = 10_000_000_000 // 10 seconds in nanoseconds
     
     private enum PlayerFocusElement: Hashable {
         case player
@@ -33,6 +83,8 @@ struct VideoPlayerView: View {
                 .onStateChanged { _, state in
                     if state == .readyToPlay {
                         showControlsTemporarily()
+                        seekToStartTimeIfNeeded()
+                        startProgressSaving()
                     }
                 }
                 .ignoresSafeArea()
@@ -64,6 +116,10 @@ struct VideoPlayerView: View {
             focusedElement = .player
             showControlsTemporarily()
         }
+        .onDisappear {
+            saveProgress()
+            progressSaveTask?.cancel()
+        }
         // Update scrub position from player time
         .onChange(of: coordinator.timemodel.currentTime) { _, newValue in
             if !isScrubbing {
@@ -92,6 +148,89 @@ struct VideoPlayerView: View {
         let options = KSOptions()
         KSOptions.isAutoPlay = true
         return options
+    }
+    
+    private func seekToStartTimeIfNeeded() {
+        guard !hasSeekToStartTime && startTime > 0 else { return }
+        hasSeekToStartTime = true
+        coordinator.seek(time: startTime)
+    }
+    
+    private func startProgressSaving() {
+        // Only save progress if we have item metadata
+        guard !itemId.isEmpty else { return }
+        
+        progressSaveTask?.cancel()
+        progressSaveTask = Task {
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: progressSaveInterval)
+                if !Task.isCancelled {
+                    await MainActor.run {
+                        saveProgress()
+                    }
+                }
+            }
+        }
+    }
+    
+    private func saveProgress() {
+        guard !itemId.isEmpty else { return }
+        
+        let currentTime = Double(coordinator.timemodel.currentTime)
+        let totalTime = Double(coordinator.timemodel.totalTime)
+        
+        // Don't save if we haven't really started
+        guard currentTime > 5 && totalTime > 0 else { return }
+        
+        // Create unique ID
+        let progressId: String
+        if let episodeId = episodeId {
+            progressId = "\(itemId):\(episodeId)"
+        } else {
+            progressId = itemId
+        }
+        
+        // Check if nearly finished (within 60 seconds of end)
+        let remainingTime = totalTime - currentTime
+        if remainingTime < 60 {
+            // Remove from continue watching if nearly finished
+            let descriptor = FetchDescriptor<WatchProgress>(
+                predicate: #Predicate { $0.id == progressId }
+            )
+            if let existing = try? modelContext.fetch(descriptor).first {
+                modelContext.delete(existing)
+            }
+            return
+        }
+        
+        // Find or create WatchProgress
+        let descriptor = FetchDescriptor<WatchProgress>(
+            predicate: #Predicate { $0.id == progressId }
+        )
+        
+        if let existing = try? modelContext.fetch(descriptor).first {
+            // Update existing
+            existing.currentTime = currentTime
+            existing.totalTime = totalTime
+            existing.lastWatched = Date()
+        } else {
+            // Create new
+            let progress = WatchProgress(
+                itemId: itemId,
+                itemType: itemType,
+                itemName: itemName,
+                itemPoster: itemPoster,
+                episodeId: episodeId,
+                episodeSeason: episodeSeason,
+                episodeNumber: episodeNumber,
+                episodeName: episodeName,
+                episodeThumbnail: episodeThumbnail,
+                currentTime: currentTime,
+                totalTime: totalTime,
+                streamUrl: streamUrl
+            )
+            modelContext.insert(progress)
+        }
     }
     
     private func togglePlayPause() {
@@ -200,3 +339,4 @@ struct VideoPlayerView: View {
         title: "Sample Video"
     )
 }
+

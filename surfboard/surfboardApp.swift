@@ -14,6 +14,7 @@ struct surfboardApp: App {
         let schema = Schema([
             AppSettings.self,
             FavoriteItem.self,
+            WatchProgress.self,
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
