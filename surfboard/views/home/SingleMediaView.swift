@@ -62,60 +62,99 @@ struct SingleMediaView: View {
     
     @ViewBuilder
     private func mediaContent(item: MediaItem) -> some View {
-        HStack(alignment: .top, spacing: 40) {
-            // Left side: Poster and info
-            VStack(spacing: 20) {
-                MediaCard(item: item)
-                
-                HStack(spacing: 16) {
-                    Text(item.name)
-                        .font(.title)
-                    
-                    Button(action: toggleFavorite) {
-                        Image(systemName: isFavorited ? "star.fill" : "star")
-                            .foregroundColor(isFavorited ? .yellow : .gray)
-                            .font(.title2)
-                    }
-                    .buttonStyle(.plain)
-                }
-                
-                if item.isMovie {
-                    NavigationLink(destination: SourcesView(item: item)) {
-                        Text("Play")
-                    }
+        ZStack {
+            // Fullscreen background
+            AsyncImage(url: item.backgroundURL) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                case .empty, .failure:
+                    Color.black
+                @unknown default:
+                    Color.black
                 }
             }
-            .frame(width: 300)
+            .ignoresSafeArea()
+            .blur(radius: 10)
             
-            // Right side: Season/Episode selection for series
-            if item.isSeries {
-                VStack(alignment: .leading, spacing: 20) {
-                    // Season picker
-                    if !item.seasons.isEmpty {
-                        Picker("Season", selection: $selectedSeason) {
-                            ForEach(item.seasons, id: \.self) { season in
-                                Text("Season \(season)").tag(season)
+            // Content
+            VStack(alignment: .center) {
+            HStack(alignment: .top) {
+                MediaCard(item: item)
+                    .frame(width: 300)
+                
+                VStack(alignment: .leading) {
+                    Text(item.name)
+                        .font(.headline)
+                        .bold()
+                    
+                    Text(item.description ?? "")
+                    
+                    HStack(alignment: .center) {
+                        if item.isMovie {
+                            NavigationLink(destination: SourcesView(item: item)) {
+                                Text("Play")
                             }
                         }
-                        .pickerStyle(.menu)
+                        
+                        Button(action: toggleFavorite) {
+                            Image(systemName: isFavorited ? "star.fill" : "star")
+                                .foregroundColor(isFavorited ? .yellow : .gray)
+                                .font(.title2)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .frame(width: 800)
+            }
+            
+            if item.isSeries {
+                VStack(alignment: .leading, spacing: 30) {
+                    // Season buttons - horizontal
+                    if !item.seasons.isEmpty {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 12) {
+                                ForEach(item.seasons, id: \.self) { season in
+                                    Button {
+                                        selectedSeason = season
+                                    } label: {
+                                        Text("Season \(season)")
+                                            .font(.callout)
+                                            .fontWeight(selectedSeason == season ? .bold : .regular)
+                                            .padding(.horizontal, 20)
+                                            .padding(.vertical, 10)
+                                            .background(selectedSeason == season ? Color.white : Color.white.opacity(0.2))
+                                            .foregroundColor(selectedSeason == season ? .black : .white)
+                                            .clipShape(Capsule())
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                            .padding(.horizontal, 50)
+                        }
                     }
                     
-                    // Episodes list
-                    ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 12) {
+                    // Episodes - horizontal scroll
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        LazyHStack(spacing: 20) {
                             ForEach(episodesForSelectedSeason(item: item)) { episode in
                                 NavigationLink(destination: SourcesView(item: item, episode: episode)) {
-                                    EpisodeRow(episode: episode)
+                                    EpisodeCard(episode: episode)
                                 }
-                                .buttonStyle(.plain)
+                                .buttonStyle(.card)
                             }
                         }
+                        .padding(.horizontal, 50)
                     }
                 }
                 .frame(maxWidth: .infinity)
             }
+            
+            
+            }
         }
-        .padding(60)
     }
     
     private func episodesForSelectedSeason(item: MediaItem) -> [Episode] {
@@ -123,11 +162,11 @@ struct SingleMediaView: View {
     }
 }
 
-struct EpisodeRow: View {
+struct EpisodeCard: View {
     let episode: Episode
     
     var body: some View {
-        HStack(spacing: 16) {
+        VStack(alignment: .leading, spacing: 12) {
             // Episode thumbnail
             AsyncImage(url: episode.thumbnailURL) { phase in
                 switch phase {
@@ -152,39 +191,35 @@ struct EpisodeRow: View {
                     EmptyView()
                 }
             }
-            .frame(width: 200, height: 112)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .frame(width: 320, height: 180)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
             
             // Episode info
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text("Episode \(episode.episodeNumber)")
                     .font(.caption)
                     .foregroundColor(.secondary)
                 
                 Text(episode.name ?? "Episode \(episode.episodeNumber)")
                     .font(.headline)
-                    .lineLimit(2)
+                    .lineLimit(1)
                 
                 if let description = episode.displayDescription {
                     Text(description)
                         .font(.caption)
                         .foregroundColor(.secondary)
-                        .lineLimit(3)
+                        .lineLimit(2)
                 }
             }
-            
-            Spacer()
-            
-            Image(systemName: "play.circle.fill")
-                .font(.title)
-                .foregroundColor(.white)
+            .frame(width: 320, alignment: .leading)
         }
-        .padding(12)
-        .background(Color.white.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
 
-#Preview {
+#Preview("Movie") {
     SingleMediaView(itemId: "tt0111161", itemType: "movie")
+}
+
+#Preview("Series") {
+    SingleMediaView(itemId: "tt0903747", itemType: "series")
 }
