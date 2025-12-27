@@ -14,20 +14,16 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
     case subtitles = "Subtitles"
     
     var id: String { rawValue }
-    
-    var icon: String {
-        switch self {
-        case .addons: return "puzzlepiece.extension"
-        case .languages: return "globe"
-        case .subtitles: return "captions.bubble"
-        }
-    }
 }
 
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var settingsArray: [AppSettings]
+    
     @State private var selectedCategory: SettingsCategory = .addons
+    @State private var torrentioURL: String = ""
+    @State private var localAudioLang: String = ""
+    @State private var localSubtitleLang: String = ""
     
     private var settings: AppSettings {
         if let existing = settingsArray.first {
@@ -40,60 +36,68 @@ struct SettingsView: View {
     }
     
     var body: some View {
-        HStack(spacing: 0) {
-            // Left sidebar - Categories
-            VStack(alignment: .leading, spacing: 0) {
-                Text("Settings")
-                    .font(.title)
-                    .fontWeight(.bold)
-                    .padding(.horizontal, 30)
-                    .padding(.top, 40)
-                    .padding(.bottom, 30)
-                
-                ForEach(SettingsCategory.allCases) { category in
-                    Button(action: {
-                        selectedCategory = category
-                    }) {
-                        HStack(spacing: 15) {
-                            Image(systemName: category.icon)
-                                .font(.title3)
-                                .frame(width: 30)
-                            
-                            Text(category.rawValue)
-                                .font(.body)
-                            
-                            Spacer()
+        Form {
+            Section("Addons") {
+                HStack(alignment: .center) {
+                    Text("Torrentio Base URL")
+                        .font(.caption)
+                    
+                    Spacer()
+                    
+                    TextField("", text: $torrentioURL)
+                        .textContentType(.URL)
+                        .autocorrectionDisabled()
+                        .onAppear {
+                            let envURL = Bundle.main.infoDictionary?["TORRENTIO_BASE_URL"] as? String ?? ""
+                            torrentioURL = settings.torrentioBaseURL ?? envURL
                         }
-                        .padding(.horizontal, 30)
-                        .padding(.vertical, 15)
-                        .background(
-                            selectedCategory == category
-                            ? Color.accentColor.opacity(0.3)
-                            : Color.clear
-                        )
-                        .cornerRadius(10)
+                        .onChange(of: torrentioURL) { _, newValue in
+                            settings.torrentioBaseURL = newValue.isEmpty ? nil : newValue
+                        }
+                }
+            }
+            
+            Section("Language") {
+                HStack(alignment: .center) {
+                    Text("Default audio language")
+                        .font(.caption)
+                    
+                    Spacer()
+                    
+                    Picker("Default audio language", selection: $localAudioLang) {
+                        ForEach(LanguageOption.audioLanguages) { language in
+                            Text(language.name).tag(language.id)
+                        }
                     }
-                    .buttonStyle(.plain)
-                    .padding(.horizontal, 10)
+                    .pickerStyle(.menu)
+                    .onAppear {
+                        localAudioLang = settings.preferredAudioLanguage
+                    }
+                    .onChange(of: localAudioLang) { _, newValue in
+                        settings.preferredAudioLanguage = newValue
+                    }
                 }
                 
-                Spacer()
-            }
-            .frame(width: 300)
-            .background(Color.gray.opacity(0.1))
-            
-            // Right content area
-            VStack {
-                switch selectedCategory {
-                case .addons:
-                    AddonsSettingsView(settings: settings)
-                case .languages:
-                    LanguagesSettingsView(settings: settings)
-                case .subtitles:
-                    SubtitlesSettingsView(settings: settings)
+                HStack(alignment: .center) {
+                    Text("Default subtitle language")
+                        .font(.caption)
+                    
+                    Spacer()
+                    
+                    Picker("Default subtitle language", selection: $localSubtitleLang) {
+                        ForEach(LanguageOption.subtitleLanguages) { language in
+                            Text(language.name).tag(language.id)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .onAppear {
+                        localSubtitleLang = settings.preferredSubtitleLanguage
+                    }
+                    .onChange(of: localSubtitleLang) { _, newValue in
+                        settings.preferredSubtitleLanguage = newValue
+                    }
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 }
