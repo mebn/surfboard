@@ -6,18 +6,38 @@
 //
 
 import Foundation
+import SwiftData
 
 class TorrentioService {
     static let shared = TorrentioService()
     
-    private let baseURL: String
+    private let secretsBaseURL: String
+    private var customBaseURL: String?
     
     private init() {
-        baseURL = Bundle.main.object(forInfoDictionaryKey: "TORRENTIO_BASE_URL") as? String ?? ""
+        secretsBaseURL = Bundle.main.object(forInfoDictionaryKey: "TORRENTIO_BASE_URL") as? String ?? ""
+    }
+    
+    /// Updates the custom base URL from SwiftData settings
+    func updateBaseURL(from settings: AppSettings?) {
+        customBaseURL = settings?.torrentioBaseURL
+    }
+    
+    /// Sets a custom base URL directly
+    func setCustomBaseURL(_ url: String?) {
+        customBaseURL = url
+    }
+    
+    /// Gets the effective base URL (custom > secrets > empty)
+    var effectiveBaseURL: String {
+        if let custom = customBaseURL, !custom.isEmpty {
+            return custom
+        }
+        return secretsBaseURL
     }
     
     func fetchStreams(type: String, id: String) async throws -> [TorrentStream] {
-        let urlString = "\(baseURL)/stream/\(type)/\(id).json"
+        let urlString = "\(effectiveBaseURL)/stream/\(type)/\(id).json"
         
         guard let url = URL(string: urlString) else {
             throw TorrentioError.invalidURL

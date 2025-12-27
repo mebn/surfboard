@@ -6,14 +6,22 @@
 //
 
 import SwiftUI
+import SwiftData
 
 struct SingleMediaView: View {
     let itemId: String
     let itemType: String
     
+    @Environment(\.modelContext) private var modelContext
+    @Query private var favorites: [FavoriteItem]
+    
     @State private var item: MediaItem?
     @State private var isLoading = true
     @State private var selectedSeason: Int = 1
+    
+    private var isFavorited: Bool {
+        favorites.contains { $0.id == itemId }
+    }
     
     var body: some View {
         Group {
@@ -43,6 +51,15 @@ struct SingleMediaView: View {
         isLoading = false
     }
     
+    private func toggleFavorite() {
+        if let existingFavorite = favorites.first(where: { $0.id == itemId }) {
+            modelContext.delete(existingFavorite)
+        } else if let item = item {
+            let favorite = FavoriteItem(from: item)
+            modelContext.insert(favorite)
+        }
+    }
+    
     @ViewBuilder
     private func mediaContent(item: MediaItem) -> some View {
         HStack(alignment: .top, spacing: 40) {
@@ -50,8 +67,17 @@ struct SingleMediaView: View {
             VStack(spacing: 20) {
                 MediaCard(item: item)
                 
-                Text(item.name)
-                    .font(.title)
+                HStack(spacing: 16) {
+                    Text(item.name)
+                        .font(.title)
+                    
+                    Button(action: toggleFavorite) {
+                        Image(systemName: isFavorited ? "star.fill" : "star")
+                            .foregroundColor(isFavorited ? .yellow : .gray)
+                            .font(.title2)
+                    }
+                    .buttonStyle(.plain)
+                }
                 
                 if item.isMovie {
                     NavigationLink(destination: SourcesView(item: item)) {

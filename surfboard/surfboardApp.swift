@@ -12,7 +12,8 @@ import SwiftData
 struct surfboardApp: App {
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
-            Item.self,
+            AppSettings.self,
+            FavoriteItem.self,
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
