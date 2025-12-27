@@ -1,10 +1,12 @@
 {
   "images" : [
     {
+      "filename" : "Group 1.jpg",
       "idiom" : "tv",
       "scale" : "1x"
     },
     {
+      "filename" : "Group 2.jpg",
       "idiom" : "tv",
       "scale" : "2x"
     }
