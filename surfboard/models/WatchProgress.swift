@@ -10,125 +10,134 @@ import SwiftData
 
 @Model
 final class WatchProgress {
-    // Unique identifier combining itemId and episodeId
+    /// Unique identifier - mediaId for movies, or "mediaId:season:episode" for TV episodes
     @Attribute(.unique) var id: String
     
-    // Media item info
-    var itemId: String
-    var itemType: String
-    var itemName: String
-    var itemPoster: String?
+    /// IMDB ID of the movie or series
+    var mediaId: String
     
-    // Episode info (optional, for series)
-    var episodeId: String?
-    var episodeSeason: Int?
+    /// "movie" or "series"
+    var mediaType: String
+    
+    /// Title of the movie or series
+    var title: String
+    
+    /// Poster URL for movies, thumbnail URL for TV episodes
+    var imageUrl: String?
+    
+    // TV Show specific fields
+    var season: Int?
     var episodeNumber: Int?
     var episodeName: String?
-    var episodeThumbnail: String?
     
-    // Progress info
-    var currentTime: TimeInterval
-    var totalTime: TimeInterval
-    var streamUrl: String
-    var lastWatched: Date
+    // Progress tracking
+    var currentTime: Double
+    var totalDuration: Double
+    var updatedAt: Date
+    
+    /// Stream URL for resuming playback directly
+    var streamUrl: String?
     
     init(
-        itemId: String,
-        itemType: String,
-        itemName: String,
-        itemPoster: String? = nil,
-        episodeId: String? = nil,
-        episodeSeason: Int? = nil,
+        id: String,
+        mediaId: String,
+        mediaType: String,
+        title: String,
+        imageUrl: String? = nil,
+        season: Int? = nil,
         episodeNumber: Int? = nil,
         episodeName: String? = nil,
-        episodeThumbnail: String? = nil,
-        currentTime: TimeInterval,
-        totalTime: TimeInterval,
-        streamUrl: String,
-        lastWatched: Date = Date()
+        currentTime: Double = 0,
+        totalDuration: Double = 0,
+        updatedAt: Date = Date(),
+        streamUrl: String? = nil
     ) {
-        // Create unique ID from itemId and episodeId
-        if let episodeId = episodeId {
-            self.id = "\(itemId):\(episodeId)"
-        } else {
-            self.id = itemId
-        }
-        
-        self.itemId = itemId
-        self.itemType = itemType
-        self.itemName = itemName
-        self.itemPoster = itemPoster
-        self.episodeId = episodeId
-        self.episodeSeason = episodeSeason
+        self.id = id
+        self.mediaId = mediaId
+        self.mediaType = mediaType
+        self.title = title
+        self.imageUrl = imageUrl
+        self.season = season
         self.episodeNumber = episodeNumber
         self.episodeName = episodeName
-        self.episodeThumbnail = episodeThumbnail
         self.currentTime = currentTime
-        self.totalTime = totalTime
+        self.totalDuration = totalDuration
+        self.updatedAt = updatedAt
         self.streamUrl = streamUrl
-        self.lastWatched = lastWatched
     }
     
-    // MARK: - Computed Properties
-    
-    /// Returns remaining time in seconds
-    var remainingTime: TimeInterval {
-        max(0, totalTime - currentTime)
+    /// Creates a WatchProgress for a movie
+    convenience init(from movie: MediaItem, currentTime: Double = 0, totalDuration: Double = 0, streamUrl: String? = nil) {
+        self.init(
+            id: movie.id,
+            mediaId: movie.id,
+            mediaType: movie.type,
+            title: movie.name,
+            imageUrl: movie.poster,
+            currentTime: currentTime,
+            totalDuration: totalDuration,
+            streamUrl: streamUrl
+        )
     }
     
-    /// Returns progress as percentage (0.0 to 1.0)
-    var progressPercentage: Double {
-        guard totalTime > 0 else { return 0 }
-        return min(1.0, currentTime / totalTime)
+    /// Creates a WatchProgress for a TV episode
+    convenience init(from series: MediaItem, episode: Episode, currentTime: Double = 0, totalDuration: Double = 0, streamUrl: String? = nil) {
+        self.init(
+            id: "\(series.id):\(episode.season):\(episode.episodeNumber)",
+            mediaId: series.id,
+            mediaType: series.type,
+            title: series.name,
+            imageUrl: episode.thumbnail,
+            season: episode.season,
+            episodeNumber: episode.episodeNumber,
+            episodeName: episode.name,
+            currentTime: currentTime,
+            totalDuration: totalDuration,
+            streamUrl: streamUrl
+        )
     }
     
-    /// Returns formatted remaining time string (e.g., "45 min left" or "1h 30m left")
-    var remainingTimeFormatted: String {
-        let remaining = Int(remainingTime)
-        let hours = remaining / 3600
-        let minutes = (remaining % 3600) / 60
-        
-        if hours > 0 {
-            return "\(hours)h \(minutes)m left"
-        } else if minutes > 0 {
-            return "\(minutes) min left"
-        } else {
-            return "Less than 1 min left"
-        }
-    }
-    
-    /// Returns the thumbnail URL - uses episode thumbnail for series, poster for movies
-    var thumbnailURL: URL? {
-        if let episodeThumbnail = episodeThumbnail {
-            return URL(string: episodeThumbnail)
-        }
-        guard let poster = itemPoster else { return nil }
-        return URL(string: poster)
-    }
-    
-    /// Returns the display title - includes episode info for series
-    var displayTitle: String {
-        if let season = episodeSeason, let episode = episodeNumber {
-            return "S\(season) E\(episode)"
-        }
-        return itemName
-    }
-    
-    /// Returns stream URL as URL object
-    var streamURL: URL? {
-        URL(string: streamUrl)
+    var imageURL: URL? {
+        guard let imageUrl = imageUrl else { return nil }
+        return URL(string: imageUrl)
     }
     
     var isMovie: Bool {
-        itemType == "movie"
+        return mediaType == "movie"
     }
     
     var isSeries: Bool {
-        itemType == "series"
+        return mediaType == "series"
     }
     
-    /// Check if the content is considered "finished" (within 60 seconds of the end)
-    var isNearlyFinished: Bool {
-        remainingTime < 60
+    /// Time remaining in seconds
+    var timeRemaining: Double {
+        return max(0, totalDuration - currentTime)
+    }
+    
+    /// Progress as a percentage (0.0 to 1.0)
+    var progress: Double {
+        guard totalDuration > 0 else { return 0 }
+        return min(1.0, currentTime / totalDuration)
+    }
+    
+    /// Formatted time remaining string (e.g., "45 min left")
+    var timeRemainingText: String {
+        let minutes = Int(timeRemaining / 60)
+        if minutes >= 60 {
+            let hours = minutes / 60
+            let remainingMinutes = minutes % 60
+            if remainingMinutes > 0 {
+                return "\(hours)h \(remainingMinutes)m left"
+            }
+            return "\(hours)h left"
+        }
+        return "\(minutes) min left"
+    }
+    
+    /// Display text for season and episode (e.g., "S1 E5")
+    var seasonEpisodeText: String? {
+        guard let season = season, let episodeNumber = episodeNumber else { return nil }
+        return "S\(season) E\(episodeNumber)"
     }
 }

@@ -11,10 +11,10 @@ struct ContinueWatchingCard: View {
     let progress: WatchProgress
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Thumbnail with progress overlay
+        VStack(alignment: .leading, spacing: 12) {
+            // Image with progress bar
             ZStack(alignment: .bottom) {
-                AsyncImage(url: progress.thumbnailURL) { phase in
+                AsyncImage(url: progress.imageURL) { phase in
                     switch phase {
                     case .empty:
                         Rectangle()
@@ -30,8 +30,7 @@ struct ContinueWatchingCard: View {
                         Rectangle()
                             .fill(Color.gray.opacity(0.3))
                             .overlay {
-                                Image(systemName: "play.rectangle")
-                                    .font(.largeTitle)
+                                Image(systemName: "photo")
                                     .foregroundColor(.gray)
                             }
                     @unknown default:
@@ -39,47 +38,41 @@ struct ContinueWatchingCard: View {
                     }
                 }
                 .frame(width: 320, height: 180)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .clipped()
+                .clipShape(RoundedRectangle(cornerRadius: 10))
                 
                 // Progress bar overlay
                 VStack(spacing: 0) {
                     Spacer()
-                    GeometryReader { geo in
+                    GeometryReader { geometry in
                         ZStack(alignment: .leading) {
-                            // Background
                             Rectangle()
                                 .fill(Color.white.opacity(0.3))
-                            
-                            // Progress
                             Rectangle()
-                                .fill(Color.red)
-                                .frame(width: geo.size.width * progress.progressPercentage)
+                                .fill(Color.white)
+                                .frame(width: geometry.size.width * progress.progress)
                         }
                     }
                     .frame(height: 4)
                 }
-                .frame(width: 320, height: 180)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
             }
             
-            // Title and remaining time
+            // Text info
             VStack(alignment: .leading, spacing: 4) {
-                Text(progress.itemName)
+                Text(progress.title)
                     .font(.callout)
-                    .fontWeight(.semibold)
+                    .fontWeight(.medium)
                     .lineLimit(1)
                 
-                HStack(spacing: 4) {
-                    if progress.isSeries, let season = progress.episodeSeason, let episode = progress.episodeNumber {
-                        Text("S\(season) E\(episode)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        Text("•")
+                HStack(spacing: 8) {
+                    if let seasonEpisode = progress.seasonEpisodeText {
+                        Text(seasonEpisode)
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
                     
-                    Text(progress.remainingTimeFormatted)
+                    Text(progress.timeRemainingText)
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -87,4 +80,35 @@ struct ContinueWatchingCard: View {
             .frame(width: 320, alignment: .leading)
         }
     }
+}
+
+#Preview("Movie") {
+    ContinueWatchingCard(
+        progress: WatchProgress(
+            id: "tt0111161",
+            mediaId: "tt0111161",
+            mediaType: "movie",
+            title: "The Shawshank Redemption",
+            imageUrl: "https://images.metahub.space/poster/medium/tt0111161/img",
+            currentTime: 3600,
+            totalDuration: 8520
+        )
+    )
+}
+
+#Preview("TV Episode") {
+    ContinueWatchingCard(
+        progress: WatchProgress(
+            id: "tt0903747:1:5",
+            mediaId: "tt0903747",
+            mediaType: "series",
+            title: "Breaking Bad",
+            imageUrl: "https://episodes.metahub.space/tt0959621/img",
+            season: 1,
+            episodeNumber: 5,
+            episodeName: "Gray Matter",
+            currentTime: 1500,
+            totalDuration: 2700
+        )
+    )
 }

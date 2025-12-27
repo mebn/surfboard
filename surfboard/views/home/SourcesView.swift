@@ -16,30 +16,11 @@ struct SourcesView: View {
         self.item = item
         self.episode = episode
     }
-    
-    @Environment(\.modelContext) private var modelContext
-    @Query private var watchProgressList: [WatchProgress]
-    
+
     @State private var streams: [TorrentStream] = []
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var selectedStream: TorrentStream?
-    
-    /// Get existing watch progress for this item/episode
-    private var existingProgress: WatchProgress? {
-        let progressId: String
-        if let episodeId = episode?.id {
-            progressId = "\(item.id):\(episodeId)"
-        } else {
-            progressId = item.id
-        }
-        return watchProgressList.first { $0.id == progressId }
-    }
-    
-    /// Start time from existing progress, or 0
-    private var startTime: TimeInterval {
-        existingProgress?.currentTime ?? 0
-    }
     
     var body: some View {
         Group {
@@ -70,24 +51,9 @@ struct SourcesView: View {
                 .listStyle(.grouped)
             }
         }
-        .navigationTitle(navigationTitle)
         .navigationDestination(item: $selectedStream) { stream in
             if let urlString = stream.url, let url = URL(string: urlString) {
-                VideoPlayerView(
-                    url: url,
-                    title: navigationTitle,
-                    startTime: startTime,
-                    itemId: item.id,
-                    itemType: item.type,
-                    itemName: item.name,
-                    itemPoster: item.poster,
-                    episodeId: episode?.id,
-                    episodeSeason: episode?.season,
-                    episodeNumber: episode?.episodeNumber,
-                    episodeName: episode?.name,
-                    episodeThumbnail: episode?.thumbnail,
-                    streamUrl: urlString
-                )
+                VideoPlayerView(url: url, item: item, episode: episode)
             }
         }
         .task {
@@ -146,33 +112,8 @@ struct StreamRow: View {
                         .lineLimit(2)
                 }
             }
-            
-            Spacer()
-            
-            if !stream.qualityBadge.isEmpty {
-                Text(stream.qualityBadge)
-                    .font(.caption)
-                    .fontWeight(.bold)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(qualityColor)
-                    .cornerRadius(4)
-            }
         }
         .padding(.vertical, 8)
-    }
-    
-    private var qualityColor: Color {
-        switch stream.qualityBadge {
-        case "4K":
-            return .purple
-        case "1080p":
-            return .blue
-        case "720p":
-            return .green
-        default:
-            return .gray
-        }
     }
 }
 

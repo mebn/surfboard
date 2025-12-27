@@ -9,9 +9,6 @@ import SwiftUI
 import SwiftData
 
 struct HomeView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Query(sort: \WatchProgress.lastWatched, order: .reverse) private var continueWatching: [WatchProgress]
-    
     @State private var popularMovies: [MediaItem] = []
     @State private var popularTVShows: [MediaItem] = []
     @State private var isLoading = true
@@ -24,13 +21,7 @@ struct HomeView: View {
         } else {
             ScrollView {
                 VStack(alignment: .leading, spacing: 40) {
-                    if !continueWatching.isEmpty {
-                        ContinueWatchingSection(
-                            items: continueWatching,
-                            onRemove: removeFromContinueWatching
-                        )
-                    }
-                    
+                    ContinueWatchingSection()
                     MediaSection(title: "Popular Movies", items: popularMovies)
                     MediaSection(title: "Popular TV Shows", items: popularTVShows)
                 }
@@ -50,64 +41,6 @@ struct HomeView: View {
         }
         
         isLoading = false
-    }
-    
-    private func removeFromContinueWatching(_ progress: WatchProgress) {
-        modelContext.delete(progress)
-    }
-}
-
-struct ContinueWatchingSection: View {
-    let items: [WatchProgress]
-    let onRemove: (WatchProgress) -> Void
-    
-    @State private var selectedShowProgress: WatchProgress?
-    
-    var body: some View {
-        VStack(alignment: .leading) {
-            Section("Continue Watching") {
-                ScrollView(.horizontal) {
-                    HStack(spacing: 40) {
-                        ForEach(items) { progress in
-                            NavigationLink(destination: VideoPlayerView(
-                                url: progress.streamURL!,
-                                title: progress.displayTitle,
-                                startTime: progress.currentTime,
-                                itemId: progress.itemId,
-                                itemType: progress.itemType,
-                                itemName: progress.itemName,
-                                itemPoster: progress.itemPoster,
-                                episodeId: progress.episodeId,
-                                episodeSeason: progress.episodeSeason,
-                                episodeNumber: progress.episodeNumber,
-                                episodeName: progress.episodeName,
-                                episodeThumbnail: progress.episodeThumbnail,
-                                streamUrl: progress.streamUrl
-                            )) {
-                                ContinueWatchingCard(progress: progress)
-                            }
-                            .buttonStyle(.card)
-                            .contextMenu {
-                                NavigationLink(destination: SingleMediaView(
-                                    itemId: progress.itemId,
-                                    itemType: progress.itemType
-                                )) {
-                                    Label("Go to Show", systemImage: "tv")
-                                }
-                                
-                                Button(role: .destructive) {
-                                    onRemove(progress)
-                                } label: {
-                                    Label("Remove from List", systemImage: "xmark.circle")
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        .scrollClipDisabled()
-        .buttonStyle(.borderless)
     }
 }
 
