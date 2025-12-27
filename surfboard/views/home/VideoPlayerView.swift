@@ -8,7 +8,6 @@
 import SwiftUI
 import SwiftData
 import KSPlayer
-import Combine // ?
 
 struct VideoPlayerView: View {
     let url: URL
@@ -16,6 +15,7 @@ struct VideoPlayerView: View {
     let episode: Episode?
     
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
     @Query private var watchProgressItems: [WatchProgress]
     @StateObject private var playerCoordinator = KSVideoPlayer.Coordinator()
     
@@ -23,6 +23,11 @@ struct VideoPlayerView: View {
     @State private var lastKnownCurrentTime: Double = 0
     @State private var lastKnownDuration: Double = 0
     @State private var progressTimer: Timer?
+    
+    // UI state
+    @State private var showControls = true
+    @State private var hideControlsTimer: Timer?
+    @State private var isPlaying = false
     
     let options: KSOptions = {
         let opt = KSOptions()
@@ -41,29 +46,211 @@ struct VideoPlayerView: View {
         }
         return item.id
     }
+    
+    private var displayTitle: String {
+        if let episode = episode {
+            return "\(item.name) - S\(episode.season)E\(episode.episodeNumber)"
+        }
+        return item.name
+    }
 
     var body: some View {
-        KSVideoPlayer(coordinator: playerCoordinator, url: url, options: options)
-            .onStateChanged { playerLayer, state in
-                if state == .readyToPlay {
-                    // Start timer to track progress
-                    startProgressTimer()
+        ZStack {
+            // Video Player
+            KSVideoPlayer(coordinator: playerCoordinator, url: url, options: options)
+                .onStateChanged { playerLayer, state in
+                    if state == .readyToPlay {
+                        startProgressTimer()
+                        isPlaying = true
+                        
+                        // Seek to saved position if resuming
+                        if let existingProgress = watchProgressItems.first(where: { $0.id == progressId }) {
+                            playerLayer.seek(time: existingProgress.currentTime, autoPlay: true) { _ in }
+                        }
+                    }
+                }
+            
+            // Controls Overlay - tap anywhere to toggle play/pause
+            Color.clear
+                .contentShape(Rectangle())
+                .focusable()
+                .onTapGesture {
+                    togglePlayPause()
+                }
+            
+            // Controls UI
+            if showControls {
+                controlsOverlay
+                    .transition(.opacity)
+                    .allowsHitTesting(false)
+            }
+        }
+        .onAppear {
+            startProgressTimer()
+            resetHideControlsTimer()
+        }
+        .onDisappear {
+            stopProgressTimer()
+            saveProgress()
+            hideControlsTimer?.invalidate()
+        }
+        .ignoresSafeArea()
+        .toolbar(.hidden, for: .tabBar)
+        .onPlayPauseCommand {
+            togglePlayPause()
+        }
+        .onMoveCommand { direction in
+            showControlsTemporarily()
+            switch direction {
+            case .left:
+                skipBackward()
+            case .right:
+                skipForward()
+            default:
+                break
+            }
+        }
+        .onExitCommand {
+            dismiss()
+        }
+    }
+    
+    // MARK: - Controls Overlay
+    
+    private var controlsOverlay: some View {
+        VStack {
+            Spacer()
+            
+            // Bottom controls
+            VStack(spacing: 20) {
+                // Title
+                HStack {
+                    Text(displayTitle)
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .shadow(color: .black.opacity(0.5), radius: 2, x: 0, y: 1)
+                    Spacer()
+                }
+                
+                // Seek bar
+                VStack(spacing: 8) {
+                    // Progress bar
+                    GeometryReader { geometry in
+                        ZStack(alignment: .leading) {
+                            // Background track
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(Color.white.opacity(0.3))
+                                .frame(height: 8)
+                            
+                            // Progress
+                            if lastKnownDuration > 0 {
+                                RoundedRectangle(cornerRadius: 4)
+                                    .fill(Color.white)
+                                    .frame(width: geometry.size.width * CGFloat(lastKnownCurrentTime / lastKnownDuration), height: 8)
+                            }
+                            
+                            // Seek indicator (knob)
+                            if lastKnownDuration > 0 {
+                                Circle()
+                                    .fill(Color.white)
+                                    .frame(width: 20, height: 20)
+                                    .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
+                                    .offset(x: (geometry.size.width - 20) * CGFloat(lastKnownCurrentTime / lastKnownDuration))
+                            }
+                        }
+                    }
+                    .frame(height: 20)
                     
-                    // Seek to saved position if resuming
-                    if let existingProgress = watchProgressItems.first(where: { $0.id == progressId }) {
-                        playerLayer.seek(time: existingProgress.currentTime, autoPlay: true) { _ in }
+                    // Time labels
+                    HStack {
+                        Text(formatTime(lastKnownCurrentTime))
+                            .font(.caption)
+                            .foregroundColor(.white.opacity(0.8))
+                            .monospacedDigit()
+                        
+                        Spacer()
+                        
+                        Text("-\(formatTime(max(0, lastKnownDuration - lastKnownCurrentTime)))")
+                            .font(.caption)
+                            .foregroundColor(.white.opacity(0.8))
+                            .monospacedDigit()
                     }
                 }
             }
-            .onAppear {
-                startProgressTimer()
+            .padding(.horizontal, 80)
+            .padding(.bottom, 60)
+        }
+        .background(
+            LinearGradient(
+                gradient: Gradient(colors: [.clear, .clear, .black.opacity(0.7)]),
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
+    }
+    
+    // MARK: - Playback Controls
+    
+    private func togglePlayPause() {
+        guard let playerLayer = playerCoordinator.playerLayer else { return }
+        
+        if isPlaying {
+            playerLayer.pause()
+        } else {
+            playerLayer.play()
+        }
+        isPlaying.toggle()
+        showControlsTemporarily()
+    }
+    
+    private func skipForward() {
+        guard let playerLayer = playerCoordinator.playerLayer else { return }
+        let newTime = min(lastKnownCurrentTime + 10, lastKnownDuration)
+        playerLayer.seek(time: newTime, autoPlay: isPlaying) { _ in }
+        lastKnownCurrentTime = newTime
+    }
+    
+    private func skipBackward() {
+        guard let playerLayer = playerCoordinator.playerLayer else { return }
+        let newTime = max(lastKnownCurrentTime - 10, 0)
+        playerLayer.seek(time: newTime, autoPlay: isPlaying) { _ in }
+        lastKnownCurrentTime = newTime
+    }
+    
+    // MARK: - UI Helpers
+    
+    private func showControlsTemporarily() {
+        withAnimation(.easeInOut(duration: 0.3)) {
+            showControls = true
+        }
+        resetHideControlsTimer()
+    }
+    
+    private func resetHideControlsTimer() {
+        hideControlsTimer?.invalidate()
+        hideControlsTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { _ in
+            Task { @MainActor in
+                if isPlaying {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        showControls = false
+                    }
+                }
             }
-            .onDisappear {
-                stopProgressTimer()
-                saveProgress()
-            }
-            .ignoresSafeArea()
-            .toolbar(.hidden, for: .tabBar)
+        }
+    }
+    
+    private func formatTime(_ seconds: Double) -> String {
+        guard seconds.isFinite && seconds >= 0 else { return "0:00" }
+        let totalSeconds = Int(seconds)
+        let hours = totalSeconds / 3600
+        let minutes = (totalSeconds % 3600) / 60
+        let secs = totalSeconds % 60
+        
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, secs)
+        } else {
+            return String(format: "%d:%02d", minutes, secs)
+        }
     }
     
     private func startProgressTimer() {
