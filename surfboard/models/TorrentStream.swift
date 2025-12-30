@@ -119,64 +119,6 @@ struct StremioStream: Codable, Identifiable, Hashable {
         return .sdr
     }
     
-    var seeders: Int? {
-        // Parse seeders from title (e.g., "👤 46 💾 6.91 GB")
-        guard let title = title else { return nil }
-        if let range = title.range(of: "👤 ?(\\d+)", options: .regularExpression) {
-            let match = String(title[range])
-            let digits = match.filter { $0.isNumber }
-            return Int(digits)
-        }
-        return nil
-    }
-    
-    var fileSize: String? {
-        // Parse file size from title (e.g., "💾 6.91 GB")
-        guard let title = title else { return nil }
-        if let range = title.range(of: "💾 ?[\\d.]+ [KMGT]B", options: .regularExpression) {
-            return String(title[range])
-                .replacingOccurrences(of: "💾 ", with: "")
-                .replacingOccurrences(of: "💾", with: "")
-                .trimmingCharacters(in: .whitespaces)
-        }
-        return nil
-    }
-    
-    var source: String? {
-        // Parse source from title (e.g., "⚙️ YTS")
-        guard let title = title else { return nil }
-        if let range = title.range(of: "⚙️ ?\\w+", options: .regularExpression) {
-            return String(title[range])
-                .replacingOccurrences(of: "⚙️ ", with: "")
-                .replacingOccurrences(of: "⚙️", with: "")
-                .trimmingCharacters(in: .whitespaces)
-        }
-        return nil
-    }
-    
-    var languages: [String] {
-        // Parse language flags/codes from title
-        guard let title = title else { return [] }
-        var langs: [String] = []
-        
-        // Check for common flags
-        if title.contains("🇬🇧") { langs.append("English") }
-        if title.contains("🇮🇹") { langs.append("Italian") }
-        if title.contains("🇫🇷") { langs.append("French") }
-        if title.contains("🇩🇪") { langs.append("German") }
-        if title.contains("🇪🇸") { langs.append("Spanish") }
-        if title.contains("🇷🇺") { langs.append("Russian") }
-        if title.contains("🇯🇵") { langs.append("Japanese") }
-        if title.contains("🇰🇷") { langs.append("Korean") }
-        if title.contains("🇨🇳") { langs.append("Chinese") }
-        if title.contains("🇧🇷") || title.contains("🇵🇹") { langs.append("Portuguese") }
-        
-        if title.lowercased().contains("multi audio") || title.lowercased().contains("multi") {
-            langs.append("Multi")
-        }
-        
-        return langs
-    }
     
     var videoCodec: String? {
         let titleLower = (title ?? "").lowercased() + (filename ?? "").lowercased()
