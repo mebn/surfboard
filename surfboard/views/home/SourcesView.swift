@@ -80,7 +80,7 @@ struct SourcesView: View {
     private func loadStreams() async {
         // Ensure addons are loaded
         if !addonManager.isLoaded {
-            await addonManager.loadAddonsFromBundle()
+            await addonManager.loadAddons()
         }
         
         do {

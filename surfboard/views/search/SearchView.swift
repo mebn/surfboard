@@ -46,7 +46,7 @@ struct SearchView: View {
         .task {
             // Ensure addons are loaded
             if !addonManager.isLoaded {
-                await addonManager.loadAddonsFromBundle()
+                await addonManager.loadAddons()
             }
         }
     }

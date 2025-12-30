@@ -34,7 +34,7 @@ struct HomeView: View {
     private func loadContent() async {
         // Ensure addons are loaded
         if !addonManager.isLoaded {
-            await addonManager.loadAddonsFromBundle()
+            await addonManager.loadAddons()
         }
         
         do {

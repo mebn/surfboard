@@ -43,7 +43,7 @@ struct SingleMediaView: View {
     private func loadItem() async {
         // Ensure addons are loaded
         if !addonManager.isLoaded {
-            await addonManager.loadAddonsFromBundle()
+            await addonManager.loadAddons()
         }
         
         do {
