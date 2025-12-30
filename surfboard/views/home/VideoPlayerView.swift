@@ -31,11 +31,11 @@ struct VideoPlayerView: View {
     @State private var isPlaying = false
     @State private var isLoading = true
     
-    // Selection sheets
-    @State private var showAudioSheet = false
-    @State private var showSubtitleSheet = false
-    @State private var showSpeedSheet = false
+    // Selection state
+    @State private var selectedAudioIndex: Int = 0
+    @State private var selectedSubtitleIndex: Int = -1 // -1 means off
     @State private var currentSpeed: Float = 1.0
+    @State private var isMenuOpen = false
     
     // Focus management
     enum FocusableElement: Hashable {
@@ -91,6 +91,7 @@ struct VideoPlayerView: View {
                         isLoading = false
                         startProgressTimer()
                         isPlaying = true
+                        showControlsTemporarily()
                         
                         // Seek to saved position if resuming
                         if let existingProgress = watchProgressItems.first(where: { $0.id == progressId }) {
@@ -149,137 +150,8 @@ struct VideoPlayerView: View {
         .onExitCommand {
             dismiss()
         }
-        .sheet(isPresented: $showAudioSheet) {
-            audioSelectionSheet
-        }
-        .sheet(isPresented: $showSubtitleSheet) {
-            subtitleSelectionSheet
-        }
-        .sheet(isPresented: $showSpeedSheet) {
-            speedSelectionSheet
-        }
     }
-    
-    private var audioSelectionSheet: some View {
-        NavigationStack {
-            List {
-                if let player = playerCoordinator.playerLayer?.player {
-                    let tracks = player.tracks(mediaType: .audio)
-                    if tracks.isEmpty {
-                        Text("No audio tracks available")
-                            .foregroundColor(.secondary)
-                    } else {
-                        ForEach(tracks.indices, id: \.self) { index in
-                            let track = tracks[index]
-                            Button {
-                                player.select(track: track)
-                                showAudioSheet = false
-                            } label: {
-                                HStack {
-                                    VStack(alignment: .leading) {
-                                        Text(track.name)
-                                            .font(.headline)
-                                        if let language = track.language {
-                                            Text(language)
-                                                .font(.subheadline)
-                                                .foregroundColor(.secondary)
-                                        }
-                                    }
-                                    Spacer()
-                                    if track.isEnabled {
-                                        Image(systemName: "checkmark")
-                                            .foregroundColor(.blue)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    Text("Player not available")
-                        .foregroundColor(.secondary)
-                }
-            }
-            .navigationTitle("Audio")
-        }
-    }
-    
-    private var subtitleSelectionSheet: some View {
-        NavigationStack {
-            List {
-                // Option to disable subtitles
-                Button {
-                    if let player = playerCoordinator.playerLayer?.player {
-                        let tracks = player.tracks(mediaType: .subtitle)
-                        for track in tracks {
-                            if track.isEnabled {
-                                player.select(track: track) // Toggle off
-                            }
-                        }
-                    }
-                    showSubtitleSheet = false
-                } label: {
-                    HStack {
-                        Text("Off")
-                            .font(.headline)
-                        Spacer()
-                    }
-                }
-                
-                if let player = playerCoordinator.playerLayer?.player {
-                    let tracks = player.tracks(mediaType: .subtitle)
-                    ForEach(tracks.indices, id: \.self) { index in
-                        let track = tracks[index]
-                        Button {
-                            player.select(track: track)
-                            showSubtitleSheet = false
-                        } label: {
-                            HStack {
-                                VStack(alignment: .leading) {
-                                    Text(track.name)
-                                        .font(.headline)
-                                    if let language = track.language {
-                                        Text(language)
-                                            .font(.subheadline)
-                                            .foregroundColor(.secondary)
-                                    }
-                                }
-                                Spacer()
-                                if track.isEnabled {
-                                    Image(systemName: "checkmark")
-                                        .foregroundColor(.blue)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            .navigationTitle("Subtitles")
-        }
-    }
-    
-    private var speedSelectionSheet: some View {
-        NavigationStack {
-            List {
-                ForEach(speedOptions, id: \.self) { speed in
-                    Button {
-                        setPlaybackSpeed(speed)
-                        showSpeedSheet = false
-                    } label: {
-                        HStack {
-                            Text(speedLabel(for: speed))
-                                .font(.headline)
-                            Spacer()
-                            if currentSpeed == speed {
-                                Image(systemName: "checkmark")
-                                    .foregroundColor(.blue)
-                            }
-                        }
-                    }
-                }
-            }
-            .navigationTitle("Playback Speed")
-        }
-    }
+
     
     private func speedLabel(for speed: Float) -> String {
         if speed == 1.0 {
@@ -304,7 +176,7 @@ struct VideoPlayerView: View {
                 // Title and control buttons row
                 HStack(alignment: .bottom) {
                     Text(displayTitle)
-                        .font(.headline)
+                        .font(.title3)
                         .foregroundColor(.white)
                         .shadow(color: .black.opacity(0.5), radius: 2, x: 0, y: 1)
                     
@@ -312,15 +184,9 @@ struct VideoPlayerView: View {
                     
                     // Control buttons (Audio, Subtitles, Speed)
                     HStack(spacing: 16) {
-                        controlButton(icon: "speaker.wave.2.fill", focus: .audioButton) {
-                            showAudioSheet = true
-                        }
-                        controlButton(icon: "captions.bubble.fill", focus: .subtitleButton) {
-                            showSubtitleSheet = true
-                        }
-                        controlButton(icon: "speedometer", focus: .speedButton) {
-                            showSpeedSheet = true
-                        }
+                        audioMenuButton
+                        subtitleMenuButton
+                        speedMenuButton
                     }
                 }
                 
@@ -341,37 +207,34 @@ struct VideoPlayerView: View {
     
     private var seekbarView: some View {
         VStack(spacing: 8) {
-            // Progress bar with focusable knob
+            // Progress bar
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
                     // Background track
-                    RoundedRectangle(cornerRadius: 4)
+                    RoundedRectangle(cornerRadius: 8)
                         .fill(Color.white.opacity(0.3))
-                        .frame(height: 8)
+                        .frame(height: 16)
+                    
+                    // Buffer indicator (shown slightly ahead of current position)
+                    if lastKnownDuration > 0 {
+                        let displayTime = isSeeking ? seekPosition : lastKnownCurrentTime
+                        // Buffer is typically ahead of playback - using playerCoordinator to get buffer if available
+                        let bufferProgress = min(1.0, (displayTime / lastKnownDuration) + 0.1)
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color.white.opacity(0.5))
+                            .frame(width: geometry.size.width * CGFloat(bufferProgress), height: 16)
+                    }
                     
                     // Progress
                     if lastKnownDuration > 0 {
                         let displayTime = isSeeking ? seekPosition : lastKnownCurrentTime
-                        RoundedRectangle(cornerRadius: 4)
+                        RoundedRectangle(cornerRadius: 8)
                             .fill(Color.white)
-                            .frame(width: geometry.size.width * CGFloat(displayTime / lastKnownDuration), height: 8)
-                    }
-                    
-                    // Seek indicator (focusable knob)
-                    if lastKnownDuration > 0 {
-                        let displayTime = isSeeking ? seekPosition : lastKnownCurrentTime
-                        let xOffset = (geometry.size.width - 24) * CGFloat(displayTime / lastKnownDuration)
-                        
-                        Circle()
-                            .fill(Color.white)
-                            .frame(width: focusedElement == .seekbar ? 28 : 20, height: focusedElement == .seekbar ? 28 : 20)
-                            .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
-                            .offset(x: xOffset)
-                            .animation(.easeInOut(duration: 0.15), value: focusedElement == .seekbar)
+                            .frame(width: geometry.size.width * CGFloat(displayTime / lastKnownDuration), height: 16)
                     }
                 }
             }
-            .frame(height: 28)
+            .frame(height: 16)
             .focusable(true) { isFocused in
                 if isFocused {
                     focusedElement = .seekbar
@@ -399,50 +262,141 @@ struct VideoPlayerView: View {
             HStack {
                 let displayTime = isSeeking ? seekPosition : lastKnownCurrentTime
                 Text(formatTime(displayTime))
-                    .font(.caption)
+                    .font(.callout)
                     .foregroundColor(.white.opacity(0.8))
                     .monospacedDigit()
                 
                 Spacer()
                 
                 Text("-\(formatTime(max(0, lastKnownDuration - displayTime)))")
-                    .font(.caption)
+                    .font(.callout)
                     .foregroundColor(.white.opacity(0.8))
                     .monospacedDigit()
             }
         }
     }
     
-    private func controlButton(icon: String, focus: FocusableElement, action: @escaping () -> Void) -> some View {
-        Button(action: {
-            showControlsTemporarilyLong() // Reset timer when button pressed
-            action()
-        }) {
-            ZStack {
-                Circle()
-                    .fill(focusedElement == focus ? Color.white.opacity(0.4) : Color.white.opacity(0.2))
-                    .frame(width: 50, height: 50)
-                
-                Image(systemName: icon)
-                    .font(.system(size: 20))
-                    .foregroundColor(.white)
-            }
-        }
-        .buttonStyle(.plain)
-        .focused($focusedElement, equals: focus)
-        .onMoveCommand { direction in
-            // Reset timer when moving between buttons
-            showControlsTemporarilyLong()
-            if focusedElement == focus {
-                switch direction {
-                case .down:
-                    focusedElement = .seekbar
-                default:
-                    break
+    // MARK: - Menu Buttons
+    
+    private var audioMenuButton: some View {
+        Menu {
+            if let player = playerCoordinator.playerLayer?.player {
+                let tracks = player.tracks(mediaType: .audio)
+                ForEach(tracks.indices, id: \.self) { index in
+                    let track = tracks[index]
+                    Button {
+                        player.select(track: track)
+                        selectedAudioIndex = index
+                    } label: {
+                        HStack {
+                            Text(track.name)
+                            if track.isEnabled {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
                 }
+            }
+        } label: {
+            menuButtonLabel(icon: "speaker.wave.2.fill", focus: .audioButton)
+        }
+        .menuStyle(.borderlessButton)
+        .focused($focusedElement, equals: .audioButton)
+        .onMoveCommand { direction in
+            showControlsTemporarilyLong()
+            if direction == .down {
+                focusedElement = .seekbar
             }
         }
     }
+    
+    private var subtitleMenuButton: some View {
+        Menu {
+            Button {
+                if let player = playerCoordinator.playerLayer?.player {
+                    let tracks = player.tracks(mediaType: .subtitle)
+                    for track in tracks {
+                        if track.isEnabled {
+                            player.select(track: track)
+                        }
+                    }
+                }
+                selectedSubtitleIndex = -1
+            } label: {
+                HStack {
+                    Text("Off")
+                    if selectedSubtitleIndex == -1 {
+                        Image(systemName: "checkmark")
+                    }
+                }
+            }
+            
+            if let player = playerCoordinator.playerLayer?.player {
+                let tracks = player.tracks(mediaType: .subtitle)
+                ForEach(tracks.indices, id: \.self) { index in
+                    let track = tracks[index]
+                    Button {
+                        player.select(track: track)
+                        selectedSubtitleIndex = index
+                    } label: {
+                        HStack {
+                            Text(track.name)
+                            if track.isEnabled {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            }
+        } label: {
+            menuButtonLabel(icon: "captions.bubble.fill", focus: .subtitleButton)
+        }
+        .menuStyle(.borderlessButton)
+        .focused($focusedElement, equals: .subtitleButton)
+        .onMoveCommand { direction in
+            showControlsTemporarilyLong()
+            if direction == .down {
+                focusedElement = .seekbar
+            }
+        }
+    }
+    
+    private var speedMenuButton: some View {
+        Picker(selection: Binding(
+            get: { currentSpeed },
+            set: { newSpeed in
+                setPlaybackSpeed(newSpeed)
+            }
+        )) {
+            ForEach(speedOptions, id: \.self) { speed in
+                Text(speedLabel(for: speed)).tag(speed)
+            }
+        } label: {
+            menuButtonLabel(icon: "speedometer", focus: .speedButton)
+        }
+        .pickerStyle(.menu)
+        .focused($focusedElement, equals: .speedButton)
+        .onMoveCommand { direction in
+            showControlsTemporarilyLong()
+            if direction == .down {
+                focusedElement = .seekbar
+            }
+        }
+    }
+    
+    private func menuButtonLabel(icon: String, focus: FocusableElement) -> some View {
+        ZStack {
+            Circle()
+                .fill(focusedElement == focus ? Color.white.opacity(0.4) : Color.white.opacity(0.2))
+                .frame(width: 64, height: 64)
+            
+            Image(systemName: icon)
+                .font(.system(size: 28))
+                .foregroundColor(.white)
+        }
+    }
+    
+
     
     private func togglePlayPause() {
         guard let playerLayer = playerCoordinator.playerLayer else { return }
