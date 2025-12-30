@@ -38,24 +38,20 @@ class AddonManager: ObservableObject {
         var urls: [URL] = []
         var seenNormalized = Set<String>()
         
-        // First, load from bundle (Secrets.xcconfig)
         #if DEBUG
-        let keys = ["CINEMETA", "TORRENTIO", "MEDIAFUSION"]
-        for key in keys {
-            if var urlString = Bundle.main.object(forInfoDictionaryKey: key) as? String,
-               !urlString.isEmpty {
-                if urlString.hasPrefix("stremio://") {
-                    urlString = urlString.replacingOccurrences(of: "stremio://", with: "https://")
-                }
-                
-                let normalized = normalizeUrl(urlString)
-                if !seenNormalized.contains(normalized), let url = URL(string: urlString) {
-                    seenNormalized.insert(normalized)
-                    urls.append(url)
-                    print("Found bundle addon URL for \(key): \(urlString)")
-                }
-            } else {
-                print("No addon URL found for key: \(key)")
+        // First, load from Secrets if in DEBUG mode
+        for urlString in Secrets.addonURLs {
+            var urlString = urlString
+            
+            if urlString.hasPrefix("stremio://") {
+                urlString = urlString.replacingOccurrences(of: "stremio://", with: "https://")
+            }
+            
+            let normalized = normalizeUrl(urlString)
+            if !seenNormalized.contains(normalized), let url = URL(string: urlString) {
+                seenNormalized.insert(normalized)
+                urls.append(url)
+                print("Found bundle addon URL for: \(urlString)")
             }
         }
         #endif

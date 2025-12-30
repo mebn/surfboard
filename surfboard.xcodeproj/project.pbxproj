@@ -7,12 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		0EBC007D2EFED17B00DF3B43 /* Secrets.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 0EBC007C2EFED17B00DF3B43 /* Secrets.xcconfig */; };
 		0EBC00A82EFED6A100DF3B43 /* KSPlayer in Frameworks */ = {isa = PBXBuildFile; productRef = 0EBC00A72EFED6A100DF3B43 /* KSPlayer */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		0EBC007C2EFED17B00DF3B43 /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		0EBCFFF92EFDA85700DF3B43 /* surfboard.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = surfboard.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -20,17 +18,28 @@
 		0EBC007F2EFED1B700DF3B43 /* Exceptions for "surfboard" folder in "surfboard" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
-				Info.plist,
+				secrets.swift.templete,
 			);
 			target = 0EBCFFF82EFDA85700DF3B43 /* surfboard */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
+		0EDE77DA2F0480D60087E778 /* Exceptions for "surfboard" folder in "Compile Sources" phase from "surfboard" target */ = {
+			isa = PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet;
+			buildPhase = 0EBCFFF52EFDA85700DF3B43 /* Sources */;
+			membershipExceptions = (
+				secrets.swift.templete,
+			);
+		};
+/* End PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		0EBCFFFB2EFDA85700DF3B43 /* surfboard */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
 				0EBC007F2EFED1B700DF3B43 /* Exceptions for "surfboard" folder in "surfboard" target */,
+				0EDE77DA2F0480D60087E778 /* Exceptions for "surfboard" folder in "Compile Sources" phase from "surfboard" target */,
 			);
 			path = surfboard;
 			sourceTree = "<group>";
@@ -52,7 +61,6 @@
 		0EBCFFF02EFDA85700DF3B43 = {
 			isa = PBXGroup;
 			children = (
-				0EBC007C2EFED17B00DF3B43 /* Secrets.xcconfig */,
 				0EBCFFFB2EFDA85700DF3B43 /* surfboard */,
 				0EBCFFFA2EFDA85700DF3B43 /* Products */,
 			);
@@ -134,7 +142,6 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				0EBC007D2EFED17B00DF3B43 /* Secrets.xcconfig in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -153,7 +160,6 @@
 /* Begin XCBuildConfiguration section */
 		0EBC00042EFDA85D00DF3B43 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 0EBC007C2EFED17B00DF3B43 /* Secrets.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -275,7 +281,6 @@
 		};
 		0EBC00072EFDA85D00DF3B43 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 0EBC007C2EFED17B00DF3B43 /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = "App Icon & Top Shelf Image";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -284,7 +289,7 @@
 				DEVELOPMENT_TEAM = CCAR39TNUP;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = surfboard/Info.plist;
+				INFOPLIST_FILE = "";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIUserInterfaceStyle = Automatic;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -310,7 +315,7 @@
 				DEVELOPMENT_TEAM = CCAR39TNUP;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = surfboard/Info.plist;
+				INFOPLIST_FILE = "";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIUserInterfaceStyle = Automatic;
 				LD_RUNPATH_SEARCH_PATHS = (

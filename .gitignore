@@ -1,3 +1,4 @@
 Secrets.xcconfig
+secrets.swift
 .env
 .DS_Store
