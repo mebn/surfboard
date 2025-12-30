@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import AVFoundation
 import KSPlayer
 
 struct VideoPlayerView: View {
@@ -19,43 +20,24 @@ struct VideoPlayerView: View {
     @Query private var watchProgressItems: [WatchProgress]
     @StateObject private var playerCoordinator = KSVideoPlayer.Coordinator()
     
-    // Track playback state locally so we can save on disappear
     @State private var lastKnownCurrentTime: Double = 0
     @State private var lastKnownDuration: Double = 0
     @State private var progressTimer: Timer?
-    
-    // UI state
-    @State private var showControls = true
-    @State private var controlsOpacity: Double = 1.0
     @State private var hideControlsTimer: Timer?
+    
+    @State private var controlsOpacity: Double = 1.0
     @State private var isPlaying = false
     @State private var isLoading = true
-    
-    // Selection state
-    @State private var selectedAudioIndex: Int = 0
-    @State private var selectedSubtitleIndex: Int = -1 // -1 means off
     @State private var currentSpeed: Float = 1.0
-    @State private var isMenuOpen = false
     
-    // Focus management
-    enum FocusableElement: Hashable {
-        case seekbar
-        case audioButton
-        case subtitleButton
-        case speedButton
-    }
-    @FocusState private var focusedElement: FocusableElement?
-    
-    // Seeking state (for scrubbing when paused)
     @State private var isSeeking = false
     @State private var seekPosition: Double = 0
     
-    private let speedOptions: [Float] = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
+    enum FocusableElement: Hashable { case seekbar, audioButton, subtitleButton, speedButton }
+    @FocusState private var focusedElement: FocusableElement?
     
-    let options: KSOptions = {
-        let opt = KSOptions()
-        return opt
-    }()
+    private let speedOptions: [Float] = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
+    private let options = KSOptions()
     
     init(url: URL, item: MediaItem, episode: Episode? = nil) {
         self.url = url
@@ -64,235 +46,136 @@ struct VideoPlayerView: View {
     }
     
     private var progressId: String {
-        if let episode = episode {
-            return "\(item.id):\(episode.season):\(episode.episodeNumber)"
-        }
-        return item.id
+        episode.map { "\(item.id):\($0.season):\($0.episodeNumber)" } ?? item.id
     }
     
     private var displayTitle: String {
-        if let episode = episode {
-            return "\(item.name) - S\(episode.season)E\(episode.episodeNumber)"
-        }
-        return item.name
+        episode.map { "\(item.name) - S\($0.season)E\($0.episodeNumber)" } ?? item.name
+    }
+    
+    private var displayTime: Double {
+        isSeeking ? seekPosition : lastKnownCurrentTime
+    }
+    
+    private var player: (any MediaPlayerProtocol)? {
+        playerCoordinator.playerLayer?.player
     }
 
     var body: some View {
         ZStack {
-            // Black background for letterboxing
-            Color.black
-                .ignoresSafeArea()
+            Color.black.ignoresSafeArea()
             
-            // Video Player
             KSVideoPlayer(coordinator: playerCoordinator, url: url, options: options)
                 .onStateChanged { playerLayer, state in
-                    switch state {
-                    case .readyToPlay:
-                        isLoading = false
-                        startProgressTimer()
-                        isPlaying = true
-                        showControlsTemporarily()
-                        
-                        // Seek to saved position if resuming
-                        if let existingProgress = watchProgressItems.first(where: { $0.id == progressId }) {
-                            playerLayer.seek(time: existingProgress.currentTime, autoPlay: true) { _ in }
-                        }
-                    case .buffering:
-                        isLoading = true
-                    case .bufferFinished:
-                        isLoading = false
-                    case .paused:
-                        // Sync UI state when player pauses (e.g., from remote button)
-                        if isPlaying {
-                            isPlaying = false
-                            showControlsPersistent()
-                        }
-                    case .playedToTheEnd:
-                        isPlaying = false
-                    default:
-                        break
-                    }
+                    handlePlayerState(state, playerLayer: playerLayer)
                 }
             
-            // Loading spinner
             if isLoading {
-                ProgressView()
-                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                ProgressView().progressViewStyle(CircularProgressViewStyle(tint: .white))
             }
             
-            // Centered pause icon when paused
             if !isPlaying && !isLoading {
                 Image(systemName: "pause.fill")
                     .font(.system(size: 80))
                     .foregroundColor(.white)
-                    .shadow(color: .black.opacity(0.5), radius: 10, x: 0, y: 0)
+                    .shadow(color: .black.opacity(0.5), radius: 10)
             }
             
-            // Controls UI with fade animation
-            controlsOverlay
-                .opacity(controlsOpacity)
+            controlsOverlay.opacity(controlsOpacity)
         }
         .onAppear {
             startProgressTimer()
-            resetHideControlsTimer()
+            showControls(hideAfter: 1.0)
             focusedElement = .seekbar
         }
         .onDisappear {
-            stopProgressTimer()
+            stopTimers()
             saveProgress()
-            hideControlsTimer?.invalidate()
         }
         .ignoresSafeArea()
         .toolbar(.hidden, for: .tabBar)
-        .onPlayPauseCommand {
-            togglePlayPause()
-        }
-        .onExitCommand {
-            dismiss()
-        }
-    }
-
-    
-    private func speedLabel(for speed: Float) -> String {
-        if speed == 1.0 {
-            return "Normal"
-        } else {
-            return "\(String(format: "%.2g", speed))x"
-        }
+        .onPlayPauseCommand { togglePlayPause() }
+        .onExitCommand { dismiss() }
     }
     
-    private func setPlaybackSpeed(_ speed: Float) {
-        guard let playerLayer = playerCoordinator.playerLayer else { return }
-        playerLayer.player.playbackRate = speed
-        currentSpeed = speed
-    }
+    // MARK: - Controls Overlay
     
     private var controlsOverlay: some View {
         VStack {
             Spacer()
-            
-            // Bottom controls
             VStack(spacing: 20) {
-                // Title and control buttons row
                 HStack(alignment: .bottom) {
                     Text(displayTitle)
                         .font(.title3)
                         .foregroundColor(.white)
                         .shadow(color: .black.opacity(0.5), radius: 2, x: 0, y: 1)
-                    
                     Spacer()
-                    
-                    // Control buttons (Audio, Subtitles, Speed)
                     HStack(spacing: 16) {
                         audioMenuButton
                         subtitleMenuButton
                         speedMenuButton
                     }
                 }
-                
-                // Seek bar
                 seekbarView
             }
             .padding(.horizontal, 80)
             .padding(.bottom, 60)
         }
         .background(
-            LinearGradient(
-                gradient: Gradient(colors: [.clear, .clear, .black.opacity(0.7)]),
-                startPoint: .top,
-                endPoint: .bottom
-            )
+            LinearGradient(colors: [.clear, .clear, .black.opacity(0.7)], startPoint: .top, endPoint: .bottom)
         )
     }
     
     private var seekbarView: some View {
         VStack(spacing: 8) {
-            // Progress bar
-            GeometryReader { geometry in
+            GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    // Background track
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.white.opacity(0.3))
-                        .frame(height: 16)
-                    
-                    // Buffer indicator (shown slightly ahead of current position)
+                    progressBar(color: .white.opacity(0.3), width: geo.size.width)
                     if lastKnownDuration > 0 {
-                        let displayTime = isSeeking ? seekPosition : lastKnownCurrentTime
-                        // Buffer is typically ahead of playback - using playerCoordinator to get buffer if available
-                        let bufferProgress = min(1.0, (displayTime / lastKnownDuration) + 0.1)
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color.white.opacity(0.5))
-                            .frame(width: geometry.size.width * CGFloat(bufferProgress), height: 16)
-                    }
-                    
-                    // Progress
-                    if lastKnownDuration > 0 {
-                        let displayTime = isSeeking ? seekPosition : lastKnownCurrentTime
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color.white)
-                            .frame(width: geometry.size.width * CGFloat(displayTime / lastKnownDuration), height: 16)
+                        progressBar(color: .white, width: geo.size.width * (displayTime / lastKnownDuration))
                     }
                 }
             }
             .frame(height: 16)
-            .focusable(true) { isFocused in
-                if isFocused {
-                    focusedElement = .seekbar
-                }
-            }
+            .focusable(true) { if $0 { focusedElement = .seekbar } }
             .focused($focusedElement, equals: .seekbar)
-            .onMoveCommand { direction in
-                if focusedElement == .seekbar {
-                    showControlsTemporarily()
-                    switch direction {
-                    case .left:
-                        skipBackward()
-                    case .right:
-                        skipForward()
-                    case .up:
-                        // Move focus to buttons
-                        focusedElement = .audioButton
-                    default:
-                        break
-                    }
-                }
-            }
+            .onMoveCommand { handleSeekbarMove($0) }
             
-            // Time labels
             HStack {
-                let displayTime = isSeeking ? seekPosition : lastKnownCurrentTime
-                Text(formatTime(displayTime))
-                    .font(.callout)
-                    .foregroundColor(.white.opacity(0.8))
-                    .monospacedDigit()
-                
+                timeLabel(displayTime)
                 Spacer()
-                
-                Text("-\(formatTime(max(0, lastKnownDuration - displayTime)))")
-                    .font(.callout)
-                    .foregroundColor(.white.opacity(0.8))
-                    .monospacedDigit()
+                timeLabel(max(0, lastKnownDuration - displayTime), prefix: "-")
             }
         }
+    }
+    
+    private func progressBar(color: Color, width: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: 8)
+            .fill(color)
+            .frame(width: width, height: 16)
+    }
+    
+    private func timeLabel(_ seconds: Double, prefix: String = "") -> some View {
+        Text("\(prefix)\(formatTime(seconds))")
+            .font(.callout)
+            .foregroundColor(.white.opacity(0.8))
+            .monospacedDigit()
     }
     
     // MARK: - Menu Buttons
     
     private var audioMenuButton: some View {
         Menu {
-            if let player = playerCoordinator.playerLayer?.player {
+            if let player = player {
                 let tracks = player.tracks(mediaType: .audio)
-                ForEach(tracks.indices, id: \.self) { index in
-                    let track = tracks[index]
+                ForEach(tracks.indices, id: \.self) { i in
+                    let track = tracks[i]
                     Button {
                         player.select(track: track)
-                        selectedAudioIndex = index
                     } label: {
                         HStack {
                             Text(track.name)
-                            if track.isEnabled {
-                                Image(systemName: "checkmark")
-                            }
+                            if track.isEnabled { Image(systemName: "checkmark") }
                         }
                     }
                 }
@@ -302,48 +185,31 @@ struct VideoPlayerView: View {
         }
         .menuStyle(.borderlessButton)
         .focused($focusedElement, equals: .audioButton)
-        .onMoveCommand { direction in
-            showControlsTemporarilyLong()
-            if direction == .down {
-                focusedElement = .seekbar
-            }
-        }
+        .onMoveCommand { if $0 == .down { focusedElement = .seekbar }; showControls(hideAfter: 5.0) }
     }
     
     private var subtitleMenuButton: some View {
         Menu {
             Button {
-                if let player = playerCoordinator.playerLayer?.player {
-                    let tracks = player.tracks(mediaType: .subtitle)
-                    for track in tracks {
-                        if track.isEnabled {
-                            player.select(track: track)
-                        }
+                if let player = player {
+                    for track in player.tracks(mediaType: .subtitle) where track.isEnabled {
+                        player.select(track: track)
                     }
                 }
-                selectedSubtitleIndex = -1
             } label: {
-                HStack {
-                    Text("Off")
-                    if selectedSubtitleIndex == -1 {
-                        Image(systemName: "checkmark")
-                    }
-                }
+                Text("Off")
             }
             
-            if let player = playerCoordinator.playerLayer?.player {
+            if let player = player {
                 let tracks = player.tracks(mediaType: .subtitle)
-                ForEach(tracks.indices, id: \.self) { index in
-                    let track = tracks[index]
+                ForEach(tracks.indices, id: \.self) { i in
+                    let track = tracks[i]
                     Button {
                         player.select(track: track)
-                        selectedSubtitleIndex = index
                     } label: {
                         HStack {
                             Text(track.name)
-                            if track.isEnabled {
-                                Image(systemName: "checkmark")
-                            }
+                            if track.isEnabled { Image(systemName: "checkmark") }
                         }
                     }
                 }
@@ -353,35 +219,27 @@ struct VideoPlayerView: View {
         }
         .menuStyle(.borderlessButton)
         .focused($focusedElement, equals: .subtitleButton)
-        .onMoveCommand { direction in
-            showControlsTemporarilyLong()
-            if direction == .down {
-                focusedElement = .seekbar
-            }
-        }
+        .onMoveCommand { if $0 == .down { focusedElement = .seekbar }; showControls(hideAfter: 5.0) }
     }
     
     private var speedMenuButton: some View {
-        Picker(selection: Binding(
-            get: { currentSpeed },
-            set: { newSpeed in
-                setPlaybackSpeed(newSpeed)
-            }
-        )) {
+        Menu {
             ForEach(speedOptions, id: \.self) { speed in
-                Text(speedLabel(for: speed)).tag(speed)
+                Button {
+                    setPlaybackSpeed(speed)
+                } label: {
+                    HStack {
+                        Text(speedLabel(speed))
+                        if currentSpeed == speed { Image(systemName: "checkmark") }
+                    }
+                }
             }
         } label: {
             menuButtonLabel(icon: "speedometer", focus: .speedButton)
         }
-        .pickerStyle(.menu)
+        .menuStyle(.borderlessButton)
         .focused($focusedElement, equals: .speedButton)
-        .onMoveCommand { direction in
-            showControlsTemporarilyLong()
-            if direction == .down {
-                focusedElement = .seekbar
-            }
-        }
+        .onMoveCommand { if $0 == .down { focusedElement = .seekbar }; showControls(hideAfter: 5.0) }
     }
     
     private func menuButtonLabel(icon: String, focus: FocusableElement) -> some View {
@@ -389,194 +247,149 @@ struct VideoPlayerView: View {
             Circle()
                 .fill(focusedElement == focus ? Color.white.opacity(0.4) : Color.white.opacity(0.2))
                 .frame(width: 64, height: 64)
-            
             Image(systemName: icon)
                 .font(.system(size: 28))
                 .foregroundColor(.white)
         }
     }
     
-
+    // MARK: - Player State
+    
+    private func handlePlayerState(_ state: KSPlayerState, playerLayer: KSPlayerLayer) {
+        switch state {
+        case .readyToPlay:
+            isLoading = false
+            isPlaying = true
+            startProgressTimer()
+            showControls(hideAfter: 1.0)
+            if let saved = watchProgressItems.first(where: { $0.id == progressId }) {
+                playerLayer.seek(time: saved.currentTime, autoPlay: true) { _ in }
+            }
+        case .buffering:
+            isLoading = true
+        case .bufferFinished:
+            isLoading = false
+        case .paused where isPlaying:
+            isPlaying = false
+            showControls(persistent: true)
+        case .playedToTheEnd:
+            isPlaying = false
+        default:
+            break
+        }
+    }
+    
+    // MARK: - Playback Controls
     
     private func togglePlayPause() {
         guard let playerLayer = playerCoordinator.playerLayer else { return }
-        
         if isPlaying {
             playerLayer.pause()
             isPlaying = false
-            // Show controls and keep them visible when paused
-            showControlsPersistent()
+            showControls(persistent: true)
         } else {
             playerLayer.play()
             isPlaying = true
-            // Start the hide timer when playing
-            showControlsTemporarily()
+            showControls(hideAfter: 1.0)
         }
     }
     
-    private func skipForward() {
+    private func skip(seconds: Double) {
         guard let playerLayer = playerCoordinator.playerLayer else { return }
-        let newTime = min(lastKnownCurrentTime + 10, lastKnownDuration)
+        let newTime = max(0, min(lastKnownCurrentTime + seconds, lastKnownDuration))
         playerLayer.seek(time: newTime, autoPlay: isPlaying) { _ in }
         lastKnownCurrentTime = newTime
     }
     
-    private func skipBackward() {
-        guard let playerLayer = playerCoordinator.playerLayer else { return }
-        let newTime = max(lastKnownCurrentTime - 10, 0)
-        playerLayer.seek(time: newTime, autoPlay: isPlaying) { _ in }
-        lastKnownCurrentTime = newTime
+    private func handleSeekbarMove(_ direction: MoveCommandDirection) {
+        guard focusedElement == .seekbar else { return }
+        showControls(hideAfter: 1.0)
+        switch direction {
+        case .left: skip(seconds: -10)
+        case .right: skip(seconds: 10)
+        case .up: focusedElement = .audioButton
+        default: break
+        }
     }
     
-    private func showControlsPersistent() {
-        // Show controls and cancel any hide timer
+    private func setPlaybackSpeed(_ speed: Float) {
+        player?.playbackRate = speed
+        currentSpeed = speed
+    }
+    
+    private func speedLabel(_ speed: Float) -> String {
+        speed == 1.0 ? "Normal" : "\(String(format: "%.2g", speed))x"
+    }
+    
+    // MARK: - Controls Visibility
+    
+    private func showControls(hideAfter: TimeInterval? = nil, persistent: Bool = false) {
         hideControlsTimer?.invalidate()
-        hideControlsTimer = nil
-        withAnimation(.easeInOut(duration: 0.3)) {
-            controlsOpacity = 1.0
-        }
-    }
-    
-    private func showControlsTemporarily() {
-        withAnimation(.easeInOut(duration: 0.3)) {
-            controlsOpacity = 1.0
-        }
-        resetHideControlsTimer()
-    }
-    
-    private func showControlsTemporarilyLong() {
-        withAnimation(.easeInOut(duration: 0.3)) {
-            controlsOpacity = 1.0
-        }
-        resetHideControlsTimerLong()
-    }
-    
-    private func resetHideControlsTimerLong() {
-        hideControlsTimer?.invalidate()
-        hideControlsTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: false) { _ in
-            Task { @MainActor in
-                // Only hide if playing
-                if isPlaying {
-                    withAnimation(.easeInOut(duration: 0.5)) {
-                        controlsOpacity = 0.0
-                    }
-                    // Reset focus to seekbar so hard press works for play/pause
-                    focusedElement = .seekbar
-                }
-            }
-        }
-    }
-    
-    private func resetHideControlsTimer() {
-        hideControlsTimer?.invalidate()
-        hideControlsTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: false) { _ in
-            Task { @MainActor in
-                // Only hide if playing
-                if isPlaying {
-                    withAnimation(.easeInOut(duration: 0.5)) {
-                        controlsOpacity = 0.0
-                    }
-                    // Reset focus to seekbar so hard press works for play/pause
-                    focusedElement = .seekbar
-                }
-            }
-        }
-    }
-    
-    private func formatTime(_ seconds: Double) -> String {
-        guard seconds.isFinite && seconds >= 0 else { return "0:00" }
-        let totalSeconds = Int(seconds)
-        let hours = totalSeconds / 3600
-        let minutes = (totalSeconds % 3600) / 60
-        let secs = totalSeconds % 60
+        withAnimation(.easeInOut(duration: 0.3)) { controlsOpacity = 1.0 }
         
-        if hours > 0 {
-            return String(format: "%d:%02d:%02d", hours, minutes, secs)
-        } else {
-            return String(format: "%d:%02d", minutes, secs)
+        guard !persistent, let delay = hideAfter else { return }
+        hideControlsTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { _ in
+            Task { @MainActor in
+                guard isPlaying else { return }
+                withAnimation(.easeInOut(duration: 0.5)) { controlsOpacity = 0.0 }
+                focusedElement = .seekbar
+            }
         }
     }
+    
+    // MARK: - Timers
     
     private func startProgressTimer() {
         progressTimer?.invalidate()
         progressTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
             Task { @MainActor in
-                updateProgress()
+                guard let playerLayer = playerCoordinator.playerLayer else { return }
+                lastKnownCurrentTime = playerLayer.player.currentPlaybackTime
+                lastKnownDuration = playerLayer.player.duration
             }
         }
     }
     
-    private func stopProgressTimer() {
+    private func stopTimers() {
         progressTimer?.invalidate()
         progressTimer = nil
+        hideControlsTimer?.invalidate()
+        hideControlsTimer = nil
     }
     
-    private func updateProgress() {
-        guard let playerLayer = playerCoordinator.playerLayer else { return }
-        lastKnownCurrentTime = playerLayer.player.currentPlaybackTime
-        lastKnownDuration = playerLayer.player.duration
+    private func formatTime(_ seconds: Double) -> String {
+        guard seconds.isFinite && seconds >= 0 else { return "0:00" }
+        let total = Int(seconds)
+        let h = total / 3600, m = (total % 3600) / 60, s = total % 60
+        return h > 0 ? String(format: "%d:%02d:%02d", h, m, s) : String(format: "%d:%02d", m, s)
     }
+    
+    // MARK: - Progress Saving
     
     private func saveProgress() {
-        let currentTime = lastKnownCurrentTime
-        let totalDuration = lastKnownDuration
+        guard lastKnownDuration > 0, lastKnownCurrentTime >= 10 else { return }
         
-        print("Saving progress: \(currentTime)/\(totalDuration)")
-        
-        // Don't save if duration is 0
-        guard totalDuration > 0 else {
-            print("Duration is 0, not saving")
-            return
-        }
-        
-        // If nearly finished (95%+), remove from continue watching
-        let progress = currentTime / totalDuration
+        let progress = lastKnownCurrentTime / lastKnownDuration
         if progress >= 0.95 {
-            if let existingProgress = watchProgressItems.first(where: { $0.id == progressId }) {
-                modelContext.delete(existingProgress)
+            if let existing = watchProgressItems.first(where: { $0.id == progressId }) {
+                modelContext.delete(existing)
                 try? modelContext.save()
-                print("Removed completed item")
             }
             return
         }
         
-        // Don't save if less than 10 seconds watched
-        guard currentTime >= 10 else {
-            print("Less than 10 seconds watched, not saving")
-            return
-        }
-        
-        if let existingProgress = watchProgressItems.first(where: { $0.id == progressId }) {
-            // Update existing progress
-            existingProgress.currentTime = currentTime
-            existingProgress.totalDuration = totalDuration
-            existingProgress.updatedAt = Date()
-            existingProgress.streamUrl = url.absoluteString
-            print("Updated existing progress")
+        if let existing = watchProgressItems.first(where: { $0.id == progressId }) {
+            existing.currentTime = lastKnownCurrentTime
+            existing.totalDuration = lastKnownDuration
+            existing.updatedAt = Date()
+            existing.streamUrl = url.absoluteString
         } else {
-            // Create new progress entry
-            let newProgress: WatchProgress
-            if let episode = episode {
-                newProgress = WatchProgress(from: item, episode: episode, currentTime: currentTime, totalDuration: totalDuration, streamUrl: url.absoluteString)
-            } else {
-                newProgress = WatchProgress(from: item, currentTime: currentTime, totalDuration: totalDuration, streamUrl: url.absoluteString)
-            }
+            let newProgress = episode != nil
+                ? WatchProgress(from: item, episode: episode!, currentTime: lastKnownCurrentTime, totalDuration: lastKnownDuration, streamUrl: url.absoluteString)
+                : WatchProgress(from: item, currentTime: lastKnownCurrentTime, totalDuration: lastKnownDuration, streamUrl: url.absoluteString)
             modelContext.insert(newProgress)
-            print("Created new progress entry for: \(newProgress.title)")
         }
-        
-        do {
-            try modelContext.save()
-            print("Model context saved successfully")
-        } catch {
-            print("Failed to save model context: \(error)")
-        }
+        try? modelContext.save()
     }
 }
 
-#Preview {
-    VideoPlayerView(
-        url: URL(string: "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8")!,
-        item: .preview()
-    )
-}
