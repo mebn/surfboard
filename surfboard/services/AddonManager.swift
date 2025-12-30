@@ -66,6 +66,59 @@ class AddonManager: ObservableObject {
         await loadAddons(from: urls)
     }
     
+    /// Loads addons from bundle combined with user-saved addon URLs
+    func loadAddonsFromBundleAndSaved(savedAddonUrls: [String]) async {
+        var urls: [URL] = []
+        var seenNormalized = Set<String>()
+        
+        // Helper to normalize URLs for deduplication
+        func normalize(_ urlString: String) -> String {
+            var normalized = urlString.lowercased()
+            if normalized.hasPrefix("stremio://") {
+                normalized = normalized.replacingOccurrences(of: "stremio://", with: "https://")
+            }
+            while normalized.hasSuffix("/") {
+                normalized.removeLast()
+            }
+            return normalized
+        }
+        
+        // First, load from bundle (Secrets.xcconfig)
+        let keys = ["CINEMETA", "TORRENTIO", "MEDIAFUSION"]
+        for key in keys {
+            if var urlString = Bundle.main.object(forInfoDictionaryKey: key) as? String,
+               !urlString.isEmpty {
+                if urlString.hasPrefix("stremio://") {
+                    urlString = urlString.replacingOccurrences(of: "stremio://", with: "https://")
+                }
+                
+                let normalized = normalize(urlString)
+                if !seenNormalized.contains(normalized), let url = URL(string: urlString) {
+                    seenNormalized.insert(normalized)
+                    urls.append(url)
+                    print("Found bundle addon URL for \(key): \(urlString)")
+                }
+            }
+        }
+        
+        // Then add saved addon URLs, skipping duplicates
+        for addonUrl in savedAddonUrls {
+            var urlString = addonUrl
+            if urlString.hasPrefix("stremio://") {
+                urlString = urlString.replacingOccurrences(of: "stremio://", with: "https://")
+            }
+            
+            let normalized = normalize(urlString)
+            if !seenNormalized.contains(normalized), let url = URL(string: urlString) {
+                seenNormalized.insert(normalized)
+                urls.append(url)
+                print("Found saved addon URL: \(urlString)")
+            }
+        }
+        
+        await loadAddons(from: urls)
+    }
+    
     /// Returns addons that support a specific resource and type
     func addons(for resource: String, type: String) -> [StremioAddonService] {
         let matching = addons.filter { $0.supports(resource: resource, type: type) }
