@@ -7,11 +7,11 @@
 
 import Foundation
 
-struct TorrentioStreamResponse: Codable {
-    let streams: [TorrentStream]
+struct StremioStreamResponse: Codable {
+    let streams: [StremioStream]
 }
 
-struct TorrentStream: Codable, Identifiable, Hashable {
+struct StremioStream: Codable, Identifiable, Hashable {
     // Core properties
     let name: String?
     let title: String?

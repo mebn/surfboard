@@ -8,6 +8,8 @@
 import SwiftUI
 
 struct SearchView: View {
+    @StateObject private var addonManager = AddonManager.shared
+    
     @State private var searchText = ""
     @State private var movies: [MediaItem] = []
     @State private var series: [MediaItem] = []
@@ -41,6 +43,12 @@ struct SearchView: View {
                 await performSearch(query: newValue)
             }
         }
+        .task {
+            // Ensure addons are loaded
+            if !addonManager.isLoaded {
+                await addonManager.loadAddonsFromBundle()
+            }
+        }
     }
     
     private func performSearch(query: String) async {
@@ -53,8 +61,8 @@ struct SearchView: View {
         isSearching = true
         
         do {
-            async let movieResults = CinemetaService.shared.searchMovies(query: query)
-            async let seriesResults = CinemetaService.shared.searchSeries(query: query)
+            async let movieResults = addonManager.searchCatalogs(type: "movie", query: query)
+            async let seriesResults = addonManager.searchCatalogs(type: "series", query: query)
             
             movies = try await movieResults
             series = try await seriesResults

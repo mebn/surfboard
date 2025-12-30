@@ -17,10 +17,11 @@ struct SourcesView: View {
         self.episode = episode
     }
 
-    @State private var streams: [TorrentStream] = []
+    @StateObject private var addonManager = AddonManager.shared
+    @State private var streams: [StremioStream] = []
     @State private var isLoading = true
     @State private var errorMessage: String?
-    @State private var selectedStream: TorrentStream?
+    @State private var selectedStream: StremioStream?
     
     var body: some View {
         Group {
@@ -77,8 +78,13 @@ struct SourcesView: View {
     }
     
     private func loadStreams() async {
+        // Ensure addons are loaded
+        if !addonManager.isLoaded {
+            await addonManager.loadAddonsFromBundle()
+        }
+        
         do {
-            streams = try await TorrentioService.shared.fetchStreams(
+            streams = try await addonManager.fetchStreams(
                 type: item.type,
                 id: streamId
             )
@@ -88,14 +94,14 @@ struct SourcesView: View {
         isLoading = false
     }
     
-    private func handleStreamTap(_ stream: TorrentStream) {
+    private func handleStreamTap(_ stream: StremioStream) {
         guard stream.url != nil else { return }
         selectedStream = stream
     }
 }
 
 struct StreamRow: View {
-    let stream: TorrentStream
+    let stream: StremioStream
     
     var body: some View {
         HStack {
@@ -120,4 +126,3 @@ struct StreamRow: View {
 #Preview {
     SourcesView(item: .preview())
 }
-

@@ -30,11 +30,11 @@ struct FlexibleString: Codable, Hashable {
     }
 }
 
-struct CinemetaCatalogResponse: Codable {
+struct StremioCatalogResponse: Codable {
     let metas: [MediaItem]
 }
 
-struct CinemetaMetaResponse: Codable {
+struct StremioMetaResponse: Codable {
     let meta: MediaItem
 }
 

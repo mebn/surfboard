@@ -12,6 +12,7 @@ struct SingleMediaView: View {
     let itemId: String
     let itemType: String
     
+    @StateObject private var addonManager = AddonManager.shared
     @Environment(\.modelContext) private var modelContext
     @Query private var favorites: [FavoriteItem]
     
@@ -40,8 +41,13 @@ struct SingleMediaView: View {
     }
     
     private func loadItem() async {
+        // Ensure addons are loaded
+        if !addonManager.isLoaded {
+            await addonManager.loadAddonsFromBundle()
+        }
+        
         do {
-            item = try await CinemetaService.shared.fetchMediaDetails(type: itemType, id: itemId)
+            item = try await addonManager.fetchMeta(type: itemType, id: itemId)
             if let firstSeason = item?.seasons.first {
                 selectedSeason = firstSeason
             }
@@ -138,7 +144,7 @@ struct SingleMediaView: View {
                     
                     // Episodes - horizontal scroll
                     ScrollView(.horizontal, showsIndicators: false) {
-                        LazyHStack(spacing: 20) {
+                        HStack(spacing: 20) {
                             ForEach(episodesForSelectedSeason(item: item)) { episode in
                                 NavigationLink(destination: SourcesView(item: item, episode: episode)) {
                                     EpisodeCard(episode: episode)

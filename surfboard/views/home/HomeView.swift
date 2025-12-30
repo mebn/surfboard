@@ -9,6 +9,8 @@ import SwiftUI
 import SwiftData
 
 struct HomeView: View {
+    @StateObject private var addonManager = AddonManager.shared
+    
     @State private var popularMovies: [MediaItem] = []
     @State private var popularTVShows: [MediaItem] = []
     @State private var isLoading = true
@@ -30,12 +32,23 @@ struct HomeView: View {
     }
     
     private func loadContent() async {
+        // Ensure addons are loaded
+        if !addonManager.isLoaded {
+            await addonManager.loadAddonsFromBundle()
+        }
+        
         do {
-            async let movies = CinemetaService.shared.fetchPopularMovies()
-            async let tvShows = CinemetaService.shared.fetchPopularTVShows()
+            // Fetch movie catalogs
+            let movieResults = try await addonManager.fetchCatalogs(type: "movie")
+            if let firstMovieCatalog = movieResults.first {
+                popularMovies = firstMovieCatalog.items
+            }
             
-            popularMovies = try await movies
-            popularTVShows = try await tvShows
+            // Fetch series catalogs
+            let seriesResults = try await addonManager.fetchCatalogs(type: "series")
+            if let firstSeriesCatalog = seriesResults.first {
+                popularTVShows = firstSeriesCatalog.items
+            }
         } catch {
             print("Error loading content: \(error)")
         }
@@ -71,4 +84,3 @@ struct MediaSection: View {
 #Preview {
     HomeView()
 }
-
