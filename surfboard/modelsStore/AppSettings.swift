@@ -10,16 +10,13 @@ import SwiftData
 
 @Model
 final class AppSettings {
-    var torrentioBaseURL: String?
     var preferredAudioLanguage: String
     var preferredSubtitleLanguage: String
     
     init(
-        torrentioBaseURL: String? = nil,
         preferredAudioLanguage: String = "en",
         preferredSubtitleLanguage: String = "en"
     ) {
-        self.torrentioBaseURL = torrentioBaseURL
         self.preferredAudioLanguage = preferredAudioLanguage
         self.preferredSubtitleLanguage = preferredSubtitleLanguage
     }

@@ -12,8 +12,16 @@ import KSPlayer
 
 struct VideoPlayerView: View {
     let url: URL
-    let item: MediaItem
+    let mediaItem: MediaItem?
     let episode: Episode?
+    
+    // For resume from WatchProgress
+    let mediaId: String
+    let mediaType: String
+    let displayName: String
+    let seasonNumber: Int?
+    let episodeNumber: Int?
+    let imageUrl: String?
     
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -39,18 +47,30 @@ struct VideoPlayerView: View {
     private let speedOptions: [Float] = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
     private let options = KSOptions()
     
+    /// Primary initializer for SourcesView - when starting playback from media details
     init(url: URL, item: MediaItem, episode: Episode? = nil) {
         self.url = url
-        self.item = item
+        self.mediaItem = item
         self.episode = episode
+        self.mediaId = item.id
+        self.mediaType = item.type
+        self.displayName = item.name
+        self.seasonNumber = episode?.season
+        self.episodeNumber = episode?.episodeNumber
+        self.imageUrl = episode?.thumbnail ?? item.background ?? item.poster
     }
     
-    private var progressId: String {
-        episode.map { "\(item.id):\($0.season):\($0.episodeNumber)" } ?? item.id
-    }
-    
-    private var displayTitle: String {
-        episode.map { "\(item.name) - S\($0.season)E\($0.episodeNumber)" } ?? item.name
+    /// Resume initializer for ContinueWatchingCard - when resuming from saved progress
+    init(url: URL, progress: WatchProgress) {
+        self.url = url
+        self.mediaItem = nil
+        self.episode = nil
+        self.mediaId = progress.mediaId
+        self.mediaType = progress.mediaType
+        self.displayName = progress.title
+        self.seasonNumber = progress.season
+        self.episodeNumber = progress.episode
+        self.imageUrl = progress.imageUrl
     }
     
     private var displayTime: Double {
@@ -105,7 +125,7 @@ struct VideoPlayerView: View {
             Spacer()
             VStack(spacing: 20) {
                 HStack(alignment: .bottom) {
-                    Text(displayTitle)
+                    Text(displayName)
                         .font(.title3)
                         .foregroundColor(.white)
                         .shadow(color: .black.opacity(0.5), radius: 2, x: 0, y: 1)
@@ -262,7 +282,7 @@ struct VideoPlayerView: View {
             isPlaying = true
             startProgressTimer()
             showControls(hideAfter: 1.0)
-            if let saved = watchProgressItems.first(where: { $0.id == progressId }) {
+            if let saved = watchProgressItems.first(where: { $0.id == mediaId }) {
                 playerLayer.seek(time: saved.currentTime, autoPlay: true) { _ in }
             }
         case .buffering:
@@ -370,23 +390,41 @@ struct VideoPlayerView: View {
         guard lastKnownDuration > 0, lastKnownCurrentTime >= 10 else { return }
         
         let progress = lastKnownCurrentTime / lastKnownDuration
+        
+        // If nearly finished, remove from continue watching
         if progress >= 0.95 {
-            if let existing = watchProgressItems.first(where: { $0.id == progressId }) {
+            if let existing = watchProgressItems.first(where: { $0.id == mediaId }) {
                 modelContext.delete(existing)
                 try? modelContext.save()
             }
             return
         }
         
-        if let existing = watchProgressItems.first(where: { $0.id == progressId }) {
+        // Use mediaId as unique key - for TV shows, this means only one episode per show
+        if let existing = watchProgressItems.first(where: { $0.id == mediaId }) {
+            // Update existing progress
             existing.currentTime = lastKnownCurrentTime
             existing.totalDuration = lastKnownDuration
-            existing.updatedAt = Date()
             existing.streamUrl = url.absoluteString
+            existing.season = seasonNumber
+            existing.episode = episodeNumber
+            existing.title = displayName
+            existing.imageUrl = imageUrl
+            existing.updatedAt = Date()
         } else {
-            let newProgress = episode != nil
-                ? WatchProgress(from: item, episode: episode!, currentTime: lastKnownCurrentTime, totalDuration: lastKnownDuration, streamUrl: url.absoluteString)
-                : WatchProgress(from: item, currentTime: lastKnownCurrentTime, totalDuration: lastKnownDuration, streamUrl: url.absoluteString)
+            // Create new progress entry
+            let newProgress = WatchProgress(
+                id: mediaId,
+                mediaId: mediaId,
+                mediaType: mediaType,
+                title: displayName,
+                imageUrl: imageUrl,
+                streamUrl: url.absoluteString,
+                season: seasonNumber,
+                episode: episodeNumber,
+                currentTime: lastKnownCurrentTime,
+                totalDuration: lastKnownDuration
+            )
             modelContext.insert(newProgress)
         }
         try? modelContext.save()

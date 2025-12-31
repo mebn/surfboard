@@ -10,33 +10,27 @@ import SwiftData
 
 @Model
 final class WatchProgress {
-    /// Unique identifier - mediaId for movies, or "mediaId:season:episode" for TV episodes
+    /// Unique identifier - for movies: mediaId, for TV shows: mediaId (so only one episode per show is saved)
     @Attribute(.unique) var id: String
     
-    /// IMDB ID of the movie or series
+    /// The media ID (IMDB ID). For both movies and TV shows, this is the parent media ID.
     var mediaId: String
     
-    /// "movie" or "series"
+    /// The media type: "movie" or "series"
     var mediaType: String
     
-    /// Title of the movie or series
     var title: String
-    
-    /// Poster URL for movies, thumbnail URL for TV episodes
     var imageUrl: String?
+    var streamUrl: String?
     
-    // TV Show specific fields
     var season: Int?
-    var episodeNumber: Int?
-    var episodeName: String?
+    var episode: Int?
     
-    // Progress tracking
     var currentTime: Double
     var totalDuration: Double
-    var updatedAt: Date
     
-    /// Stream URL for resuming playback directly
-    var streamUrl: String?
+    /// Timestamp for sorting
+    var updatedAt: Date
     
     init(
         id: String,
@@ -44,70 +38,30 @@ final class WatchProgress {
         mediaType: String,
         title: String,
         imageUrl: String? = nil,
+        streamUrl: String? = nil,
         season: Int? = nil,
-        episodeNumber: Int? = nil,
-        episodeName: String? = nil,
+        episode: Int? = nil,
         currentTime: Double = 0,
         totalDuration: Double = 0,
-        updatedAt: Date = Date(),
-        streamUrl: String? = nil
+        updatedAt: Date = Date()
     ) {
         self.id = id
         self.mediaId = mediaId
         self.mediaType = mediaType
         self.title = title
         self.imageUrl = imageUrl
+        self.streamUrl = streamUrl
         self.season = season
-        self.episodeNumber = episodeNumber
-        self.episodeName = episodeName
+        self.episode = episode
         self.currentTime = currentTime
         self.totalDuration = totalDuration
         self.updatedAt = updatedAt
-        self.streamUrl = streamUrl
     }
     
-    /// Creates a WatchProgress for a movie
-    convenience init(from movie: MediaItem, currentTime: Double = 0, totalDuration: Double = 0, streamUrl: String? = nil) {
-        self.init(
-            id: movie.id,
-            mediaId: movie.id,
-            mediaType: movie.type,
-            title: movie.name,
-            imageUrl: movie.background,
-            currentTime: currentTime,
-            totalDuration: totalDuration,
-            streamUrl: streamUrl
-        )
-    }
-    
-    /// Creates a WatchProgress for a TV episode
-    convenience init(from series: MediaItem, episode: Episode, currentTime: Double = 0, totalDuration: Double = 0, streamUrl: String? = nil) {
-        self.init(
-            id: "\(series.id):\(episode.season):\(episode.episodeNumber)",
-            mediaId: series.id,
-            mediaType: series.type,
-            title: series.name,
-            imageUrl: episode.thumbnail,
-            season: episode.season,
-            episodeNumber: episode.episodeNumber,
-            episodeName: episode.name,
-            currentTime: currentTime,
-            totalDuration: totalDuration,
-            streamUrl: streamUrl
-        )
-    }
-    
+    /// Computed property to get URL from string
     var imageURL: URL? {
         guard let imageUrl = imageUrl else { return nil }
         return URL(string: imageUrl)
-    }
-    
-    var isMovie: Bool {
-        return mediaType == "movie"
-    }
-    
-    var isSeries: Bool {
-        return mediaType == "series"
     }
     
     /// Time remaining in seconds
@@ -137,7 +91,7 @@ final class WatchProgress {
     
     /// Display text for season and episode (e.g., "S1 E5")
     var seasonEpisodeText: String? {
-        guard let season = season, let episodeNumber = episodeNumber else { return nil }
-        return "S\(season) E\(episodeNumber)"
+        guard let season = season, let episode = episode else { return nil }
+        return "S\(season) E\(episode)"
     }
 }
