@@ -12,31 +12,12 @@ import SwiftData
 final class FavoriteItem {
     @Attribute(.unique) var id: String
     var type: String
-    var name: String
-    var poster: String?
     var addedAt: Date
     
-    init(id: String, type: String, name: String, poster: String? = nil, addedAt: Date = Date()) {
-        self.id = id
-        self.type = type
-        self.name = name
-        self.poster = poster
-        self.addedAt = addedAt
-    }
-    
-    /// Creates a FavoriteItem from a MediaItem
-    convenience init(from mediaItem: MediaItem) {
-        self.init(
-            id: mediaItem.id,
-            type: mediaItem.type,
-            name: mediaItem.name,
-            poster: mediaItem.poster
-        )
-    }
-    
-    var posterURL: URL? {
-        guard let poster = poster else { return nil }
-        return URL(string: poster)
+    init(mediaItem: MediaItem) {
+        id = mediaItem.id
+        type = mediaItem.type
+        addedAt = Date()
     }
     
     var isMovie: Bool {

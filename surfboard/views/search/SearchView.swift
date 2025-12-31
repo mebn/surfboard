@@ -84,10 +84,8 @@ struct SearchSection: View {
                 ScrollView(.horizontal) {
                     HStack(spacing: 40) {
                         ForEach(items) { item in
-                            NavigationLink(destination: SingleMediaView(itemId: item.id, itemType: item.type)) {
                                 MediaCard(item: item)
                                     .containerRelativeFrame(.horizontal, count: 6, spacing: 40)
-                            }
                         }
                     }
                 }

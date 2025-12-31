@@ -10,75 +10,37 @@ import SwiftUI
 struct ContinueWatchingCard: View {
     let progress: WatchProgress
     
+    let radius: CGFloat = 64
+    
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Image with progress bar
-            ZStack(alignment: .bottom) {
-                AsyncImage(url: progress.imageURL) { phase in
-                    switch phase {
-                    case .empty:
-                        Rectangle()
-                            .fill(Color.gray.opacity(0.3))
-                            .overlay {
-                                ProgressView()
-                            }
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    case .failure:
-                        Rectangle()
-                            .fill(Color.gray.opacity(0.3))
-                            .overlay {
-                                Image(systemName: "photo")
-                                    .foregroundColor(.gray)
-                            }
-                    @unknown default:
-                        EmptyView()
-                    }
-                }
-                .frame(width: 320, height: 180)
-                .clipped()
-                .clipShape(RoundedRectangle(cornerRadius: 10))
-                
-                // Progress bar overlay
-                VStack(spacing: 0) {
-                    Spacer()
-                    GeometryReader { geometry in
-                        ZStack(alignment: .leading) {
-                            Rectangle()
-                                .fill(Color.white.opacity(0.3))
-                            Rectangle()
-                                .fill(Color.white)
-                                .frame(width: geometry.size.width * progress.progress)
-                        }
-                    }
-                    .frame(height: 4)
-                }
-                .clipShape(RoundedRectangle(cornerRadius: 10))
+        NavigationLink(destination: HomeView()) {
+            AsyncImage(url: progress.imageURL) { image in
+                image
+                    .resizable()
+                    .clipShape(.rect(cornerRadius: radius))
+                    .hoverEffect(.highlight)
+            } placeholder: {
+                ProgressView()
             }
+            .aspectRatio(340 / 200, contentMode: .fit)
             
-            // Text info
-            VStack(alignment: .leading, spacing: 4) {
-                Text(progress.title)
-                    .font(.callout)
-                    .fontWeight(.medium)
-                    .lineLimit(1)
+            Text(progress.title)
+                .lineLimit(1)
+            
+            HStack(alignment: .center, spacing: 12) {
+                Text(progress.timeRemainingText)
                 
-                HStack(spacing: 8) {
-                    if let seasonEpisode = progress.seasonEpisodeText {
-                        Text(seasonEpisode)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    
-                    Text(progress.timeRemainingText)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                if let seasonEpisode = progress.seasonEpisodeText {
+                    Text("|")
+                    Text(seasonEpisode)
                 }
+
             }
-            .frame(width: 320, alignment: .leading)
+            .foregroundColor(.secondary)
+            .lineLimit(1)
         }
+        .buttonStyle(.borderless)
+        .buttonBorderShape(.roundedRectangle(radius: radius))
     }
 }
 

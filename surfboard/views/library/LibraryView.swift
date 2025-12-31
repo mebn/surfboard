@@ -48,6 +48,9 @@ struct LibraryView: View {
 struct FavoriteSection: View {
     let title: String
     let items: [FavoriteItem]
+
+    @State private var mediaItems: [String: MediaItem] = [:]
+    @State private var isLoading = true
     
     var body: some View {
         VStack(alignment: .leading) {
@@ -55,8 +58,11 @@ struct FavoriteSection: View {
                 ScrollView(.horizontal) {
                     HStack(spacing: 40) {
                         ForEach(items) { item in
-                            NavigationLink(destination: SingleMediaView(itemId: item.id, itemType: item.type)) {
-                                FavoriteCard(item: item)
+                            if let mediaItem = mediaItems[item.id] {
+                                MediaCard(item: mediaItem)
+                                    .containerRelativeFrame(.horizontal, count: 6, spacing: 40)
+                            } else if isLoading {
+                                ProgressView()
                                     .containerRelativeFrame(.horizontal, count: 6, spacing: 40)
                             }
                         }
@@ -66,20 +72,35 @@ struct FavoriteSection: View {
         }
         .scrollClipDisabled()
         .buttonStyle(.borderless)
-    }
-}
-
-struct FavoriteCard: View {
-    let item: FavoriteItem
-    
-    var body: some View {
-        AsyncImage(url: item.posterURL) { image in
-            image
-                .resizable()
-        } placeholder: {
-            ProgressView()
+        .task {
+            await loadMediaItems()
         }
-        .aspectRatio(250 / 375, contentMode: .fit)
+    }
+
+    private func loadMediaItems() async {
+        let addonManager = AddonManager.shared
+        
+        await withTaskGroup(of: (String, MediaItem?).self) { group in
+            for item in items {
+                group.addTask {
+                    do {
+                        let mediaItem = try await addonManager.fetchMeta(type: item.type, id: item.id)
+                        return (item.id, mediaItem)
+                    } catch {
+                        print("Failed to fetch meta for \(item.id): \(error)")
+                        return (item.id, nil)
+                    }
+                }
+            }
+            
+            for await (id, mediaItem) in group {
+                if let mediaItem = mediaItem {
+                    mediaItems[id] = mediaItem
+                }
+            }
+        }
+        
+        isLoading = false
     }
 }
 

@@ -73,7 +73,7 @@ final class WatchProgress {
             mediaId: movie.id,
             mediaType: movie.type,
             title: movie.name,
-            imageUrl: movie.poster,
+            imageUrl: movie.background,
             currentTime: currentTime,
             totalDuration: totalDuration,
             streamUrl: streamUrl

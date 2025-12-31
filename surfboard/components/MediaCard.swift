@@ -10,14 +10,36 @@ import SwiftUI
 struct MediaCard: View {
     let item: MediaItem
     
+    let radius: CGFloat = 64
+    
     var body: some View {
-        AsyncImage(url: item.posterURL) { image in
-            image
-                .resizable()
-        } placeholder: {
-            ProgressView()
+        NavigationLink(destination: SingleMediaView(itemId: item.id, itemType: item.type)) {
+            AsyncImage(url: item.posterURL) { image in
+                image
+                    .resizable()
+                    .clipShape(.rect(cornerRadius: radius))
+                    .hoverEffect(.highlight)
+            } placeholder: {
+                ProgressView()
+            }
+            .aspectRatio(250 / 375, contentMode: .fit)
+        
+            Text(item.name)
+                .lineLimit(1)
+        
+            HStack(alignment: .center, spacing: 12) {
+                Text(item.year ?? "")
+            
+                if item.year != nil || item.imdbRating != nil {
+                    Text("|")
+                }
+                
+                Text(item.imdbRating ?? "")
+            }
+            .foregroundColor(.secondary)
         }
-        .aspectRatio(250 / 375, contentMode: .fit)
+        .buttonStyle(.borderless)
+        .buttonBorderShape(.roundedRectangle(radius: radius))
     }
 }
 

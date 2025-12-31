@@ -61,7 +61,7 @@ struct SingleMediaView: View {
         if let existingFavorite = favorites.first(where: { $0.id == itemId }) {
             modelContext.delete(existingFavorite)
         } else if let item = item {
-            let favorite = FavoriteItem(from: item)
+            let favorite = FavoriteItem(mediaItem: item)
             modelContext.insert(favorite)
         }
     }
