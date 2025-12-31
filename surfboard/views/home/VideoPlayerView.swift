@@ -12,16 +12,8 @@ import KSPlayer
 
 struct VideoPlayerView: View {
     let url: URL
-    let mediaItem: MediaItem?
+    let mediaItem: MediaItem
     let episode: Episode?
-    
-    // For resume from WatchProgress
-    let mediaId: String
-    let mediaType: String
-    let displayName: String
-    let seasonNumber: Int?
-    let episodeNumber: Int?
-    let imageUrl: String?
     
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -47,30 +39,18 @@ struct VideoPlayerView: View {
     private let speedOptions: [Float] = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
     private let options = KSOptions()
     
-    /// Primary initializer for SourcesView - when starting playback from media details
-    init(url: URL, item: MediaItem, episode: Episode? = nil) {
+    /// Initializer for playback - from SourcesView or ContinueWatching
+    init(url: URL, mediaItem: MediaItem, episode: Episode? = nil) {
         self.url = url
-        self.mediaItem = item
+        self.mediaItem = mediaItem
         self.episode = episode
-        self.mediaId = item.id
-        self.mediaType = item.type
-        self.displayName = item.name
-        self.seasonNumber = episode?.season
-        self.episodeNumber = episode?.episodeNumber
-        self.imageUrl = episode?.thumbnail ?? item.background ?? item.poster
     }
     
-    /// Resume initializer for ContinueWatchingCard - when resuming from saved progress
-    init(url: URL, progress: WatchProgress) {
-        self.url = url
-        self.mediaItem = nil
-        self.episode = nil
-        self.mediaId = progress.mediaId
-        self.mediaType = progress.mediaType
-        self.displayName = progress.title
-        self.seasonNumber = progress.season
-        self.episodeNumber = progress.episode
-        self.imageUrl = progress.imageUrl
+    private var displayName: String {
+        if let episode = episode {
+            return "\(mediaItem.name) - S\(episode.season) E\(episode.episodeNumber)"
+        }
+        return mediaItem.name
     }
     
     private var displayTime: Double {
@@ -282,7 +262,7 @@ struct VideoPlayerView: View {
             isPlaying = true
             startProgressTimer()
             showControls(hideAfter: 1.0)
-            if let saved = watchProgressItems.first(where: { $0.id == mediaId }) {
+            if let saved = watchProgressItems.first(where: { $0.id == mediaItem.id }) {
                 playerLayer.seek(time: saved.currentTime, autoPlay: true) { _ in }
             }
         case .buffering:
@@ -393,35 +373,28 @@ struct VideoPlayerView: View {
         
         // If nearly finished, remove from continue watching
         if progress >= 0.95 {
-            if let existing = watchProgressItems.first(where: { $0.id == mediaId }) {
+            if let existing = watchProgressItems.first(where: { $0.id == mediaItem.id }) {
                 modelContext.delete(existing)
                 try? modelContext.save()
             }
             return
         }
         
-        // Use mediaId as unique key - for TV shows, this means only one episode per show
-        if let existing = watchProgressItems.first(where: { $0.id == mediaId }) {
+        // Use mediaItem.id as unique key - for TV shows, this means only one episode per show
+        if let existing = watchProgressItems.first(where: { $0.id == mediaItem.id }) {
             // Update existing progress
+            existing.updateMediaItem(mediaItem)
+            existing.updateEpisode(episode)
+            existing.streamUrl = url.absoluteString
             existing.currentTime = lastKnownCurrentTime
             existing.totalDuration = lastKnownDuration
-            existing.streamUrl = url.absoluteString
-            existing.season = seasonNumber
-            existing.episode = episodeNumber
-            existing.title = displayName
-            existing.imageUrl = imageUrl
             existing.updatedAt = Date()
         } else {
             // Create new progress entry
             let newProgress = WatchProgress(
-                id: mediaId,
-                mediaId: mediaId,
-                mediaType: mediaType,
-                title: displayName,
-                imageUrl: imageUrl,
+                mediaItem: mediaItem,
+                episode: episode,
                 streamUrl: url.absoluteString,
-                season: seasonNumber,
-                episode: episodeNumber,
                 currentTime: lastKnownCurrentTime,
                 totalDuration: lastKnownDuration
             )
@@ -430,4 +403,3 @@ struct VideoPlayerView: View {
         try? modelContext.save()
     }
 }
-

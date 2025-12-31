@@ -13,55 +13,73 @@ final class WatchProgress {
     /// Unique identifier - for movies: mediaId, for TV shows: mediaId (so only one episode per show is saved)
     @Attribute(.unique) var id: String
     
-    /// The media ID (IMDB ID). For both movies and TV shows, this is the parent media ID.
-    var mediaId: String
+    /// The stored MediaItem as JSON data
+    var mediaItemData: Data
     
-    /// The media type: "movie" or "series"
-    var mediaType: String
+    /// The stored Episode as JSON data (for TV shows)
+    var episodeData: Data?
     
-    var title: String
-    var imageUrl: String?
+    /// The stream URL for resuming playback
     var streamUrl: String?
     
-    var season: Int?
-    var episode: Int?
-    
+    /// Current playback position in seconds
     var currentTime: Double
+    
+    /// Total duration in seconds
     var totalDuration: Double
     
     /// Timestamp for sorting
     var updatedAt: Date
     
     init(
-        id: String,
-        mediaId: String,
-        mediaType: String,
-        title: String,
-        imageUrl: String? = nil,
+        mediaItem: MediaItem,
+        episode: Episode? = nil,
         streamUrl: String? = nil,
-        season: Int? = nil,
-        episode: Int? = nil,
         currentTime: Double = 0,
         totalDuration: Double = 0,
         updatedAt: Date = Date()
     ) {
-        self.id = id
-        self.mediaId = mediaId
-        self.mediaType = mediaType
-        self.title = title
-        self.imageUrl = imageUrl
+        self.id = mediaItem.id
+        self.mediaItemData = (try? JSONEncoder().encode(mediaItem)) ?? Data()
+        self.episodeData = episode.flatMap { try? JSONEncoder().encode($0) }
         self.streamUrl = streamUrl
-        self.season = season
-        self.episode = episode
         self.currentTime = currentTime
         self.totalDuration = totalDuration
         self.updatedAt = updatedAt
     }
     
-    /// Computed property to get URL from string
+    /// Decode the stored MediaItem
+    var mediaItem: MediaItem? {
+        try? JSONDecoder().decode(MediaItem.self, from: mediaItemData)
+    }
+    
+    /// Decode the stored Episode
+    var episode: Episode? {
+        guard let data = episodeData else { return nil }
+        return try? JSONDecoder().decode(Episode.self, from: data)
+    }
+    
+    /// Computed property to get the best available image URL
     var imageURL: URL? {
-        guard let imageUrl = imageUrl else { return nil }
-        return URL(string: imageUrl)
+        // Priority: episode thumbnail → background → poster
+        if let thumbnail = episode?.thumbnail, let url = URL(string: thumbnail) {
+            return url
+        }
+        if let background = mediaItem?.background, let url = URL(string: background) {
+            return url
+        }
+        if let poster = mediaItem?.poster, let url = URL(string: poster) {
+            return url
+        }
+        return nil
+    }
+    
+    /// Display title - for TV shows includes episode info
+    var displayTitle: String {
+        if let episode = episode, let mediaItem = mediaItem {
+            return "\(mediaItem.name) - S\(episode.season) E\(episode.episodeNumber)"
+        }
+        return mediaItem?.name ?? "Unknown"
     }
     
     /// Time remaining in seconds
@@ -91,7 +109,17 @@ final class WatchProgress {
     
     /// Display text for season and episode (e.g., "S1 E5")
     var seasonEpisodeText: String? {
-        guard let season = season, let episode = episode else { return nil }
-        return "S\(season) E\(episode)"
+        guard let episode = episode else { return nil }
+        return "S\(episode.season) E\(episode.episodeNumber)"
+    }
+    
+    /// Update the stored MediaItem
+    func updateMediaItem(_ mediaItem: MediaItem) {
+        self.mediaItemData = (try? JSONEncoder().encode(mediaItem)) ?? Data()
+    }
+    
+    /// Update the stored Episode
+    func updateEpisode(_ episode: Episode?) {
+        self.episodeData = episode.flatMap { try? JSONEncoder().encode($0) }
     }
 }

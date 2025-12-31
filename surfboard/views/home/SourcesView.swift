@@ -54,7 +54,7 @@ struct SourcesView: View {
         }
         .navigationDestination(item: $selectedStream) { stream in
             if let urlString = stream.url, let url = URL(string: urlString) {
-                VideoPlayerView(url: url, item: item, episode: episode)
+                VideoPlayerView(url: url, mediaItem: item, episode: episode)
             }
         }
         .task {

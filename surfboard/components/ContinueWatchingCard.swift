@@ -13,8 +13,10 @@ struct ContinueWatchingCard: View {
     let radius: CGFloat = 64
     
     var body: some View {
-        if let streamUrl = progress.streamUrl, let url = URL(string: streamUrl) {
-            NavigationLink(destination: VideoPlayerView(url: url, progress: progress)) {
+        if let streamUrl = progress.streamUrl, 
+           let url = URL(string: streamUrl),
+           let mediaItem = progress.mediaItem {
+            NavigationLink(destination: VideoPlayerView(url: url, mediaItem: mediaItem, episode: progress.episode)) {
                 AsyncImage(url: progress.imageURL) { image in
                     image
                         .resizable()
@@ -25,7 +27,7 @@ struct ContinueWatchingCard: View {
                 }
                 .aspectRatio(340 / 200, contentMode: .fit)
                 
-                Text(progress.title)
+                Text(progress.displayTitle)
                     .lineLimit(1)
                 
                 HStack(alignment: .center, spacing: 12) {

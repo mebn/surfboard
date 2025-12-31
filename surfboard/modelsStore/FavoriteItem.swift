@@ -11,20 +11,25 @@ import SwiftData
 @Model
 final class FavoriteItem {
     @Attribute(.unique) var id: String
-    var type: String
+    var mediaItemData: Data
     var addedAt: Date
     
     init(mediaItem: MediaItem) {
-        id = mediaItem.id
-        type = mediaItem.type
-        addedAt = Date()
+        self.id = mediaItem.id
+        self.mediaItemData = (try? JSONEncoder().encode(mediaItem)) ?? Data()
+        self.addedAt = Date()
+    }
+    
+    /// Decode the stored MediaItem
+    var mediaItem: MediaItem? {
+        try? JSONDecoder().decode(MediaItem.self, from: mediaItemData)
     }
     
     var isMovie: Bool {
-        return type == "movie"
+        mediaItem?.isMovie ?? false
     }
     
     var isSeries: Bool {
-        return type == "series"
+        mediaItem?.isSeries ?? false
     }
 }
