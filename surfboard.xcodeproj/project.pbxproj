@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		0EBC00A82EFED6A100DF3B43 /* KSPlayer in Frameworks */ = {isa = PBXBuildFile; productRef = 0EBC00A72EFED6A100DF3B43 /* KSPlayer */; };
+		0EE3F8482F0EE4CC00085999 /* Kingfisher in Frameworks */ = {isa = PBXBuildFile; productRef = 0EE3F8472F0EE4CC00085999 /* Kingfisher */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -51,6 +52,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				0EE3F8482F0EE4CC00085999 /* Kingfisher in Frameworks */,
 				0EBC00A82EFED6A100DF3B43 /* KSPlayer in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -95,6 +97,7 @@
 			name = surfboard;
 			packageProductDependencies = (
 				0EBC00A72EFED6A100DF3B43 /* KSPlayer */,
+				0EE3F8472F0EE4CC00085999 /* Kingfisher */,
 			);
 			productName = surfboard;
 			productReference = 0EBCFFF92EFDA85700DF3B43 /* surfboard.app */;
@@ -126,6 +129,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				0EBC00A62EFED6A100DF3B43 /* XCRemoteSwiftPackageReference "KSPlayer" */,
+				0EE3F8462F0EE4CC00085999 /* XCRemoteSwiftPackageReference "Kingfisher" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 0EBCFFFA2EFDA85700DF3B43 /* Products */;
@@ -363,6 +367,14 @@
 				minimumVersion = 2.3.4;
 			};
 		};
+		0EE3F8462F0EE4CC00085999 /* XCRemoteSwiftPackageReference "Kingfisher" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/onevcat/Kingfisher";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 8.6.2;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -370,6 +382,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 0EBC00A62EFED6A100DF3B43 /* XCRemoteSwiftPackageReference "KSPlayer" */;
 			productName = KSPlayer;
+		};
+		0EE3F8472F0EE4CC00085999 /* Kingfisher */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 0EE3F8462F0EE4CC00085999 /* XCRemoteSwiftPackageReference "Kingfisher" */;
+			productName = Kingfisher;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

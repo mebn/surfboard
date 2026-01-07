@@ -79,25 +79,71 @@ struct MediaSection: View {
 }
 
 struct ContinueWatchingSection: View {
-    @Query(sort: \WatchProgress.updatedAt, order: .reverse) private var watchProgress: [WatchProgress]
-    @State private var selectedProgress: WatchProgress?
+    @Query(sort: \MediaRecord.updatedAt, order: .reverse) private var allRecords: [MediaRecord]
+    @StateObject private var metadataCache = MediaMetadataCache.shared
+    
+    @State private var loadedItems: [(record: MediaRecord, metadata: MediaItem)] = []
+    @State private var isLoading = true
+    
+    /// Filter to only records that have continue watching data
+    private var continueWatchingRecords: [MediaRecord] {
+        allRecords.filter { $0.hasContinueWatching }
+    }
     
     var body: some View {
-        if !watchProgress.isEmpty {
+        if !continueWatchingRecords.isEmpty {
             VStack(alignment: .leading) {
                 Section("Continue Watching") {
-                    ScrollView(.horizontal) {
-                        HStack(spacing: 40) {
-                            ForEach(watchProgress) { progress in
-                                ContinueWatchingCard(progress: progress)
-                                    .containerRelativeFrame(.horizontal, count: 5, spacing: 40)
+                    if isLoading {
+                        ScrollView(.horizontal) {
+                            HStack(spacing: 40) {
+                                ForEach(0..<3, id: \.self) { _ in
+                                    RoundedRectangle(cornerRadius: 64)
+                                        .fill(Color.gray.opacity(0.3))
+                                        .aspectRatio(340/200, contentMode: .fit)
+                                        .containerRelativeFrame(.horizontal, count: 5, spacing: 40)
+                                        .overlay { ProgressView() }
+                                }
+                            }
+                        }
+                    } else {
+                        ScrollView(.horizontal) {
+                            HStack(spacing: 40) {
+                                ForEach(loadedItems, id: \.record.id) { item in
+                                    ContinueWatchingCard(record: item.record, metadata: item.metadata)
+                                        .containerRelativeFrame(.horizontal, count: 5, spacing: 40)
+                                }
                             }
                         }
                     }
                 }
             }
             .scrollClipDisabled()
+            .task(id: continueWatchingRecords.map { $0.id }) {
+                await loadMetadata()
+            }
         }
+    }
+    
+    private func loadMetadata() async {
+        isLoading = true
+        
+        // Prefetch all metadata in parallel
+        await metadataCache.prefetch(items: continueWatchingRecords.map { ($0.id, $0.type) })
+        
+        // Load metadata for each record
+        var items: [(record: MediaRecord, metadata: MediaItem)] = []
+        for record in continueWatchingRecords {
+            do {
+                let metadata = try await metadataCache.get(id: record.id, type: record.type)
+                items.append((record: record, metadata: metadata))
+            } catch {
+                print("Failed to load metadata for \(record.id): \(error)")
+            }
+        }
+        
+        loadedItems = items
+        isLoading = false
     }
 }
 

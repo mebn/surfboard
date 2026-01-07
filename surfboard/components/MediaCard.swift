@@ -14,15 +14,12 @@ struct MediaCard: View {
     
     var body: some View {
         NavigationLink(destination: SingleMediaView(itemId: item.id, itemType: item.type)) {
-            AsyncImage(url: item.posterURL) { image in
-                image
-                    .resizable()
-                    .clipShape(.rect(cornerRadius: radius))
-                    .hoverEffect(.highlight)
-            } placeholder: {
-                ProgressView()
-            }
-            .aspectRatio(250 / 375, contentMode: .fit)
+            CachedImage(
+                url: item.posterURL,
+                aspectRatio: 250 / 375,
+                cornerRadius: radius
+            )
+            .hoverEffect(.highlight)
         
             Text(item.name)
                 .lineLimit(1)

@@ -17,7 +17,7 @@ struct VideoPlayerView: View {
     
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-    @Query private var watchProgressItems: [WatchProgress]
+    @Query private var allRecords: [MediaRecord]
     @StateObject private var playerCoordinator = KSVideoPlayer.Coordinator()
     
     @State private var lastKnownCurrentTime: Double = 0
@@ -38,6 +38,11 @@ struct VideoPlayerView: View {
     
     private let speedOptions: [Float] = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
     private let options = KSOptions()
+    
+    /// Get the MediaRecord for this media
+    private var record: MediaRecord? {
+        allRecords.first { $0.id == mediaItem.id }
+    }
     
     /// Initializer for playback - from SourcesView or ContinueWatching
     init(url: URL, mediaItem: MediaItem, episode: Episode? = nil) {
@@ -262,8 +267,12 @@ struct VideoPlayerView: View {
             isPlaying = true
             startProgressTimer()
             showControls(hideAfter: 1.0)
-            if let saved = watchProgressItems.first(where: { $0.id == mediaItem.id }) {
-                playerLayer.seek(time: saved.currentTime, autoPlay: true) { _ in }
+            
+            // Resume from saved position if available
+            if let existingRecord = record,
+               let progress = existingRecord.progressForEpisode(episodeId: episode?.id),
+               !progress.isCompleted {
+                playerLayer.seek(time: progress.currentTime, autoPlay: true) { _ in }
             }
         case .buffering:
             isLoading = true
@@ -371,35 +380,39 @@ struct VideoPlayerView: View {
         
         let progress = lastKnownCurrentTime / lastKnownDuration
         
-        // If nearly finished, remove from continue watching
-        if progress >= 0.95 {
-            if let existing = watchProgressItems.first(where: { $0.id == mediaItem.id }) {
-                modelContext.delete(existing)
-                try? modelContext.save()
-            }
-            return
+        // Get or create MediaRecord
+        let mediaRecord: MediaRecord
+        if let existing = record {
+            mediaRecord = existing
+        } else {
+            mediaRecord = MediaRecord(id: mediaItem.id, type: mediaItem.type)
+            modelContext.insert(mediaRecord)
         }
         
-        // Use mediaItem.id as unique key - for TV shows, this means only one episode per show
-        if let existing = watchProgressItems.first(where: { $0.id == mediaItem.id }) {
-            // Update existing progress
-            existing.updateMediaItem(mediaItem)
-            existing.updateEpisode(episode)
-            existing.streamUrl = url.absoluteString
-            existing.currentTime = lastKnownCurrentTime
-            existing.totalDuration = lastKnownDuration
-            existing.updatedAt = Date()
-        } else {
-            // Create new progress entry
-            let newProgress = WatchProgress(
-                mediaItem: mediaItem,
-                episode: episode,
-                streamUrl: url.absoluteString,
-                currentTime: lastKnownCurrentTime,
-                totalDuration: lastKnownDuration
+        // If nearly finished (>= 90%), mark as completed but keep in history
+        // The episode will show as "watched" with a checkmark
+        if progress >= 0.9 {
+            // Save with full duration to mark as completed
+            mediaRecord.updateProgress(
+                episodeId: episode?.id,
+                season: episode?.season,
+                episode: episode?.episodeNumber,
+                currentTime: lastKnownDuration,
+                totalDuration: lastKnownDuration,
+                streamUrl: url.absoluteString
             )
-            modelContext.insert(newProgress)
+        } else {
+            // Save current progress for continue watching
+            mediaRecord.updateProgress(
+                episodeId: episode?.id,
+                season: episode?.season,
+                episode: episode?.episodeNumber,
+                currentTime: lastKnownCurrentTime,
+                totalDuration: lastKnownDuration,
+                streamUrl: url.absoluteString
+            )
         }
+        
         try? modelContext.save()
     }
 }

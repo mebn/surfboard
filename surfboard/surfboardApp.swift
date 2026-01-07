@@ -13,8 +13,7 @@ struct surfboardApp: App {
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             AppSettings.self,
-            FavoriteItem.self,
-            WatchProgress.self,
+            MediaRecord.self,
             SavedAddon.self,
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
@@ -29,6 +28,10 @@ struct surfboardApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .task {
+                    // Clear expired metadata cache on launch
+                    await MediaMetadataCache.shared.clearExpiredCache()
+                }
         }
         .modelContainer(sharedModelContainer)
     }

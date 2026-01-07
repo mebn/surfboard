@@ -13,15 +13,21 @@ struct SingleMediaView: View {
     let itemType: String
     
     @StateObject private var addonManager = AddonManager.shared
+    @StateObject private var metadataCache = MediaMetadataCache.shared
     @Environment(\.modelContext) private var modelContext
-    @Query private var favorites: [FavoriteItem]
+    @Query private var allRecords: [MediaRecord]
     
     @State private var item: MediaItem?
     @State private var isLoading = true
     @State private var selectedSeason: Int = 1
     
+    /// Get or create MediaRecord for this item
+    private var record: MediaRecord? {
+        allRecords.first { $0.id == itemId }
+    }
+    
     private var isFavorited: Bool {
-        favorites.contains { $0.id == itemId }
+        record?.isFavorite ?? false
     }
     
     var body: some View {
@@ -47,7 +53,14 @@ struct SingleMediaView: View {
         }
         
         do {
-            item = try await addonManager.fetchMeta(type: itemType, id: itemId)
+            // For series: always fetch fresh to catch new episodes
+            // For movies: use cache
+            if itemType == "series" {
+                item = try await metadataCache.fetchFresh(id: itemId, type: itemType)
+            } else {
+                item = try await metadataCache.get(id: itemId, type: itemType)
+            }
+            
             if let firstSeason = item?.seasons.first {
                 selectedSeason = firstSeason
             }
@@ -58,107 +71,101 @@ struct SingleMediaView: View {
     }
     
     private func toggleFavorite() {
-        if let existingFavorite = favorites.first(where: { $0.id == itemId }) {
-            modelContext.delete(existingFavorite)
+        if let existingRecord = record {
+            existingRecord.isFavorite.toggle()
+            existingRecord.favoritedAt = existingRecord.isFavorite ? Date() : nil
         } else if let item = item {
-            let favorite = FavoriteItem(mediaItem: item)
-            modelContext.insert(favorite)
+            let newRecord = MediaRecord(id: item.id, type: item.type)
+            newRecord.isFavorite = true
+            newRecord.favoritedAt = Date()
+            modelContext.insert(newRecord)
         }
+        try? modelContext.save()
     }
     
     @ViewBuilder
     private func mediaContent(item: MediaItem) -> some View {
         ZStack {
             // Fullscreen background
-            AsyncImage(url: item.backgroundURL) { phase in
-                switch phase {
-                case .success(let image):
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                case .empty, .failure:
-                    Color.black
-                @unknown default:
-                    Color.black
-                }
-            }
-            .ignoresSafeArea()
-            .blur(radius: 10)
+            CachedBackgroundImage(url: item.backgroundURL)
+                .ignoresSafeArea()
+                .blur(radius: 10)
             
             // Content
             VStack(alignment: .center) {
-            HStack(alignment: .top) {
-                MediaCard(item: item)
-                    .frame(width: 300)
+                HStack(alignment: .top) {
+                    MediaCard(item: item)
+                        .frame(width: 300)
+                    
+                    VStack(alignment: .leading) {
+                        Text(item.name)
+                            .font(.headline)
+                            .bold()
+                        
+                        Text(item.description ?? "")
+                        
+                        HStack(alignment: .center) {
+                            if item.isMovie {
+                                NavigationLink(destination: SourcesView(item: item)) {
+                                    Text("Play")
+                                }
+                            }
+                            
+                            Button(action: toggleFavorite) {
+                                Image(systemName: isFavorited ? "star.fill" : "star")
+                                    .foregroundColor(isFavorited ? .yellow : .gray)
+                                    .font(.title2)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .frame(width: 800)
+                }
                 
-                VStack(alignment: .leading) {
-                    Text(item.name)
-                        .font(.headline)
-                        .bold()
-                    
-                    Text(item.description ?? "")
-                    
-                    HStack(alignment: .center) {
-                        if item.isMovie {
-                            NavigationLink(destination: SourcesView(item: item)) {
-                                Text("Play")
+                if item.isSeries {
+                    VStack(alignment: .leading, spacing: 30) {
+                        // Season buttons - horizontal
+                        if !item.seasons.isEmpty {
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 12) {
+                                    ForEach(item.seasons, id: \.self) { season in
+                                        Button {
+                                            selectedSeason = season
+                                        } label: {
+                                            Text("Season \(season)")
+                                                .font(.callout)
+                                                .fontWeight(selectedSeason == season ? .bold : .regular)
+                                                .padding(.horizontal, 20)
+                                                .padding(.vertical, 10)
+                                                .background(selectedSeason == season ? Color.white : Color.white.opacity(0.2))
+                                                .foregroundColor(selectedSeason == season ? .black : .white)
+                                                .clipShape(Capsule())
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                                .padding(.horizontal, 50)
                             }
                         }
                         
-                        Button(action: toggleFavorite) {
-                            Image(systemName: isFavorited ? "star.fill" : "star")
-                                .foregroundColor(isFavorited ? .yellow : .gray)
-                                .font(.title2)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .frame(width: 800)
-            }
-            
-            if item.isSeries {
-                VStack(alignment: .leading, spacing: 30) {
-                    // Season buttons - horizontal
-                    if !item.seasons.isEmpty {
+                        // Episodes - horizontal scroll
                         ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 12) {
-                                ForEach(item.seasons, id: \.self) { season in
-                                    Button {
-                                        selectedSeason = season
-                                    } label: {
-                                        Text("Season \(season)")
-                                            .font(.callout)
-                                            .fontWeight(selectedSeason == season ? .bold : .regular)
-                                            .padding(.horizontal, 20)
-                                            .padding(.vertical, 10)
-                                            .background(selectedSeason == season ? Color.white : Color.white.opacity(0.2))
-                                            .foregroundColor(selectedSeason == season ? .black : .white)
-                                            .clipShape(Capsule())
+                            HStack(spacing: 20) {
+                                ForEach(episodesForSelectedSeason(item: item)) { episode in
+                                    NavigationLink(destination: SourcesView(item: item, episode: episode)) {
+                                        EpisodeCard(
+                                            episode: episode,
+                                            isWatched: record?.isEpisodeWatched(episodeId: episode.id) ?? false
+                                        )
                                     }
-                                    .buttonStyle(.plain)
+                                    .buttonStyle(.card)
                                 }
                             }
                             .padding(.horizontal, 50)
                         }
                     }
-                    
-                    // Episodes - horizontal scroll
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 20) {
-                            ForEach(episodesForSelectedSeason(item: item)) { episode in
-                                NavigationLink(destination: SourcesView(item: item, episode: episode)) {
-                                    EpisodeCard(episode: episode)
-                                }
-                                .buttonStyle(.card)
-                            }
-                        }
-                        .padding(.horizontal, 50)
-                    }
+                    .frame(maxWidth: .infinity)
                 }
-                .frame(maxWidth: .infinity)
-            }
-            
-            
             }
         }
     }
@@ -170,35 +177,33 @@ struct SingleMediaView: View {
 
 struct EpisodeCard: View {
     let episode: Episode
+    var isWatched: Bool = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Episode thumbnail
-            AsyncImage(url: episode.thumbnailURL) { phase in
-                switch phase {
-                case .empty:
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.3))
-                        .overlay {
-                            ProgressView()
-                        }
-                case .success(let image):
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                case .failure:
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.3))
-                        .overlay {
-                            Image(systemName: "photo")
-                                .foregroundColor(.gray)
-                        }
-                @unknown default:
-                    EmptyView()
+            // Episode thumbnail with watched indicator
+            ZStack(alignment: .topTrailing) {
+                CachedThumbnail(
+                    url: episode.thumbnailURL,
+                    width: 320,
+                    height: 180,
+                    cornerRadius: 10
+                )
+                
+                // Watched checkmark overlay
+                if isWatched {
+                    ZStack {
+                        Circle()
+                            .fill(Color.black.opacity(0.7))
+                            .frame(width: 32, height: 32)
+                        
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(.green)
+                    }
+                    .padding(8)
                 }
             }
-            .frame(width: 320, height: 180)
-            .clipShape(RoundedRectangle(cornerRadius: 10))
             
             // Episode info
             VStack(alignment: .leading, spacing: 6) {
