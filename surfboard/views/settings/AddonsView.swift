@@ -5,16 +5,16 @@
 //  Created by Marcus Nilszén on 2025-12-30.
 //
 
-import SwiftUI
 import SwiftData
+import SwiftUI
 
 struct AddonsView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \SavedAddon.createdAt) private var savedAddons: [SavedAddon]
     @ObservedObject private var addonManager = AddonManager.shared
-    
+
     @State private var newAddonUrl: String = ""
-    
+
     var body: some View {
         List {
             Section("New addon") {
@@ -23,7 +23,7 @@ struct AddonsView: View {
                         .keyboardType(.URL)
                         .textContentType(.URL)
                         .autocorrectionDisabled()
-                    
+
                     Button(action: {
                         addAddon()
                     }) {
@@ -33,7 +33,7 @@ struct AddonsView: View {
                     .disabled(newAddonUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
-            
+
             Section("Your addons") {
                 if savedAddons.isEmpty {
                     Text("No addons added yet")
@@ -43,9 +43,9 @@ struct AddonsView: View {
                         HStack {
                             TextField("", text: .constant(addon.url))
                                 .foregroundColor(.secondary)
-                            
+
                             Spacer()
-                            
+
                             Button(action: {
                                 deleteAddon(addon)
                             }) {
@@ -59,31 +59,31 @@ struct AddonsView: View {
             }
         }
     }
-    
+
     private func addAddon() {
         let trimmedUrl = newAddonUrl.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedUrl.isEmpty else { return }
-        
+
         // Check for duplicates against saved addons
         let normalizedNewUrl = addonManager.normalizeUrl(trimmedUrl)
         if savedAddons.contains(where: { addonManager.normalizeUrl($0.url) == normalizedNewUrl }) {
             newAddonUrl = ""
             return
         }
-        
+
         let savedAddon = SavedAddon(url: trimmedUrl)
         modelContext.insert(savedAddon)
         newAddonUrl = ""
-        
+
         // Reload addons
         Task {
             await addonManager.loadAddons(savedAddonUrls: savedAddons.map { $0.url } + [trimmedUrl])
         }
     }
-    
+
     private func deleteAddon(_ addon: SavedAddon) {
         modelContext.delete(addon)
-        
+
         // Reload addons
         Task {
             let remainingUrls = savedAddons.filter { $0.id != addon.id }.map { $0.url }

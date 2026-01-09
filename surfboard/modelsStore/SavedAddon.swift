@@ -12,7 +12,7 @@ import SwiftData
 final class SavedAddon {
     var url: String
     var createdAt: Date
-    
+
     init(url: String, createdAt: Date = Date()) {
         self.url = url
         self.createdAt = createdAt

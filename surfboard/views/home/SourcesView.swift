@@ -5,13 +5,13 @@
 //  Created by Marcus Nilszén on 2025-12-26.
 //
 
-import SwiftUI
 import SwiftData
+import SwiftUI
 
 struct SourcesView: View {
     let item: MediaItem
     let episode: Episode?
-    
+
     init(item: MediaItem, episode: Episode? = nil) {
         self.item = item
         self.episode = episode
@@ -22,7 +22,7 @@ struct SourcesView: View {
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var selectedStream: StremioStream?
-    
+
     var body: some View {
         Group {
             if isLoading {
@@ -61,14 +61,14 @@ struct SourcesView: View {
             await loadStreams()
         }
     }
-    
+
     private var navigationTitle: String {
         if let episode = episode {
             return "\(item.name) - S\(episode.season)E\(episode.episodeNumber)"
         }
         return item.name
     }
-    
+
     private var streamId: String {
         if let episode = episode {
             // For series episodes, use the episode ID (e.g., "tt1234567:1:1" format)
@@ -76,13 +76,13 @@ struct SourcesView: View {
         }
         return item.id
     }
-    
+
     private func loadStreams() async {
         // Ensure addons are loaded
         if !addonManager.isLoaded {
             await addonManager.loadAddons()
         }
-        
+
         do {
             streams = try await addonManager.fetchStreams(
                 type: item.type,
@@ -93,7 +93,7 @@ struct SourcesView: View {
         }
         isLoading = false
     }
-    
+
     private func handleStreamTap(_ stream: StremioStream) {
         guard stream.url != nil else { return }
         selectedStream = stream
@@ -102,7 +102,7 @@ struct SourcesView: View {
 
 struct StreamRow: View {
     let stream: StremioStream
-    
+
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 8) {
@@ -110,7 +110,7 @@ struct StreamRow: View {
                     Text(name)
                         .font(.headline)
                 }
-                
+
                 if let title = stream.title {
                     Text(title)
                         .font(.subheadline)

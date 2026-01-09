@@ -5,23 +5,23 @@
 //  Created by Marcus Nilszén on 2025-12-25.
 //
 
-import SwiftUI
 import SwiftData
+import SwiftUI
 
 struct LibraryView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \MediaRecord.favoritedAt, order: .reverse) private var allRecords: [MediaRecord]
     @StateObject private var metadataCache = MediaMetadataCache.shared
-    
+
     @State private var favoriteMovies: [(record: MediaRecord, metadata: MediaItem)] = []
     @State private var favoriteTVShows: [(record: MediaRecord, metadata: MediaItem)] = []
     @State private var isLoading = true
-    
+
     /// Filter to only favorited records
     private var favoriteRecords: [MediaRecord] {
         allRecords.filter { $0.isFavorite }
     }
-    
+
     var body: some View {
         Group {
             if favoriteRecords.isEmpty {
@@ -41,7 +41,7 @@ struct LibraryView: View {
                         if !favoriteMovies.isEmpty {
                             FavoriteSection(title: "Favorite Movies", items: favoriteMovies.map { $0.metadata })
                         }
-                        
+
                         if !favoriteTVShows.isEmpty {
                             FavoriteSection(title: "Favorite TV Shows", items: favoriteTVShows.map { $0.metadata })
                         }
@@ -55,17 +55,17 @@ struct LibraryView: View {
             }
         }
     }
-    
+
     private func loadMetadata() async {
         isLoading = true
-        
+
         // Prefetch all metadata in parallel
         await metadataCache.prefetch(items: favoriteRecords.map { ($0.id, $0.type) })
-        
+
         // Load metadata for each record
         var movies: [(record: MediaRecord, metadata: MediaItem)] = []
         var tvShows: [(record: MediaRecord, metadata: MediaItem)] = []
-        
+
         for record in favoriteRecords {
             do {
                 let metadata = try await metadataCache.get(id: record.id, type: record.type)
@@ -78,7 +78,7 @@ struct LibraryView: View {
                 print("Failed to load metadata for \(record.id): \(error)")
             }
         }
-        
+
         favoriteMovies = movies
         favoriteTVShows = tvShows
         isLoading = false
@@ -88,7 +88,7 @@ struct LibraryView: View {
 struct FavoriteSection: View {
     let title: String
     let items: [MediaItem]
-    
+
     var body: some View {
         VStack(alignment: .leading) {
             Section(title) {

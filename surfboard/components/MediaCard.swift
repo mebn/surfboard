@@ -9,34 +9,31 @@ import SwiftUI
 
 struct MediaCard: View {
     let item: MediaItem
-    
-    let radius: CGFloat = 64
-    
+
     var body: some View {
         NavigationLink(destination: SingleMediaView(itemId: item.id, itemType: item.type)) {
             CachedImage(
                 url: item.posterURL,
-                aspectRatio: 250 / 375,
-                cornerRadius: radius
+                aspectRatio: 250 / 375
             )
             .hoverEffect(.highlight)
-        
+
             Text(item.name)
                 .lineLimit(1)
-        
+
             HStack(alignment: .center, spacing: 12) {
                 Text(item.year ?? "")
-            
+
                 if item.year != nil || item.imdbRating != nil {
                     Text("|")
                 }
-                
+
                 Text(item.imdbRating ?? "")
             }
             .foregroundColor(.secondary)
         }
         .buttonStyle(.borderless)
-        .buttonBorderShape(.roundedRectangle(radius: radius))
+        .buttonBorderShape(.roundedRectangle(radius: 64))
     }
 }
 

@@ -9,12 +9,12 @@ import SwiftUI
 
 struct SearchView: View {
     @StateObject private var addonManager = AddonManager.shared
-    
+
     @State private var searchText = ""
     @State private var movies: [MediaItem] = []
     @State private var series: [MediaItem] = []
     @State private var isSearching = false
-    
+
     var body: some View {
         ScrollView {
             if searchText.isEmpty {
@@ -50,26 +50,26 @@ struct SearchView: View {
             }
         }
     }
-    
+
     private func performSearch(query: String) async {
         guard !query.isEmpty else {
             movies = []
             series = []
             return
         }
-        
+
         isSearching = true
-        
+
         do {
             async let movieResults = addonManager.searchCatalogs(type: "movie", query: query)
             async let seriesResults = addonManager.searchCatalogs(type: "series", query: query)
-            
+
             movies = try await movieResults
             series = try await seriesResults
         } catch {
             print("Search error: \(error)")
         }
-        
+
         isSearching = false
     }
 }
@@ -77,15 +77,15 @@ struct SearchView: View {
 struct SearchSection: View {
     let title: String
     let items: [MediaItem]
-    
+
     var body: some View {
         VStack(alignment: .leading) {
             Section(title) {
                 ScrollView(.horizontal) {
                     HStack(spacing: 40) {
                         ForEach(items) { item in
-                                MediaCard(item: item)
-                                    .containerRelativeFrame(.horizontal, count: 6, spacing: 40)
+                            MediaCard(item: item)
+                                .containerRelativeFrame(.horizontal, count: 6, spacing: 40)
                         }
                     }
                 }

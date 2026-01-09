@@ -5,16 +5,16 @@
 //  Created by Marcus Nilszén on 2025-12-25.
 //
 
-import SwiftUI
 import SwiftData
+import SwiftUI
 
 struct HomeView: View {
     @StateObject private var addonManager = AddonManager.shared
-    
+
     @State private var popularMovies: [MediaItem] = []
     @State private var popularTVShows: [MediaItem] = []
     @State private var isLoading = true
-    
+
     var body: some View {
         if isLoading {
             ProgressView().task {
@@ -30,20 +30,20 @@ struct HomeView: View {
             }
         }
     }
-    
+
     private func loadContent() async {
         // Ensure addons are loaded
         if !addonManager.isLoaded {
             await addonManager.loadAddons()
         }
-        
+
         do {
             // Fetch movie catalogs
             let movieResults = try await addonManager.fetchCatalogs(type: "movie")
             if let firstMovieCatalog = movieResults.first {
                 popularMovies = firstMovieCatalog.items
             }
-            
+
             // Fetch series catalogs
             let seriesResults = try await addonManager.fetchCatalogs(type: "series")
             if let firstSeriesCatalog = seriesResults.first {
@@ -52,7 +52,7 @@ struct HomeView: View {
         } catch {
             print("Error loading content: \(error)")
         }
-        
+
         isLoading = false
     }
 }
@@ -60,7 +60,7 @@ struct HomeView: View {
 struct MediaSection: View {
     let title: String
     let items: [MediaItem]
-    
+
     var body: some View {
         VStack(alignment: .leading) {
             Section(title) {
@@ -81,15 +81,15 @@ struct MediaSection: View {
 struct ContinueWatchingSection: View {
     @Query(sort: \MediaRecord.updatedAt, order: .reverse) private var allRecords: [MediaRecord]
     @StateObject private var metadataCache = MediaMetadataCache.shared
-    
+
     @State private var loadedItems: [(record: MediaRecord, metadata: MediaItem)] = []
     @State private var isLoading = true
-    
+
     /// Filter to only records that have continue watching data
     private var continueWatchingRecords: [MediaRecord] {
         allRecords.filter { $0.hasContinueWatching }
     }
-    
+
     var body: some View {
         if !continueWatchingRecords.isEmpty {
             VStack(alignment: .leading) {
@@ -97,10 +97,10 @@ struct ContinueWatchingSection: View {
                     if isLoading {
                         ScrollView(.horizontal) {
                             HStack(spacing: 40) {
-                                ForEach(0..<3, id: \.self) { _ in
+                                ForEach(0 ..< 3, id: \.self) { _ in
                                     RoundedRectangle(cornerRadius: 64)
                                         .fill(Color.gray.opacity(0.3))
-                                        .aspectRatio(340/200, contentMode: .fit)
+                                        .aspectRatio(340 / 200, contentMode: .fit)
                                         .containerRelativeFrame(.horizontal, count: 5, spacing: 40)
                                         .overlay { ProgressView() }
                                 }
@@ -124,13 +124,13 @@ struct ContinueWatchingSection: View {
             }
         }
     }
-    
+
     private func loadMetadata() async {
         isLoading = true
-        
+
         // Prefetch all metadata in parallel
         await metadataCache.prefetch(items: continueWatchingRecords.map { ($0.id, $0.type) })
-        
+
         // Load metadata for each record
         var items: [(record: MediaRecord, metadata: MediaItem)] = []
         for record in continueWatchingRecords {
@@ -141,7 +141,7 @@ struct ContinueWatchingSection: View {
                 print("Failed to load metadata for \(record.id): \(error)")
             }
         }
-        
+
         loadedItems = items
         isLoading = false
     }

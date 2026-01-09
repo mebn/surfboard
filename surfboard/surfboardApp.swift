@@ -5,8 +5,8 @@
 //  Created by Marcus Nilszén on 2025-12-25.
 //
 
-import SwiftUI
 import SwiftData
+import SwiftUI
 
 @main
 struct surfboardApp: App {

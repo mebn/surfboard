@@ -19,14 +19,14 @@ struct StremioManifest: Codable, Identifiable {
     let catalogs: [ManifestCatalog]?
     let idPrefixes: [String]?
     let behaviorHints: ManifestBehaviorHints?
-    
+
     /// Checks if this addon provides a specific resource for a given type
     func supports(resource: String, type: String) -> Bool {
         let hasResource = resources.contains { res in
             switch res {
-            case .simple(let name):
+            case let .simple(name):
                 return name == resource
-            case .detailed(let detail):
+            case let .detailed(detail):
                 if detail.name != resource { return false }
                 if let types = detail.types, !types.contains(type) { return false }
                 return true
@@ -34,7 +34,7 @@ struct StremioManifest: Codable, Identifiable {
         }
         return hasResource && types.contains(type)
     }
-    
+
     /// Returns catalogs for a specific type
     func catalogs(for type: String) -> [ManifestCatalog] {
         catalogs?.filter { $0.type == type } ?? []
@@ -45,7 +45,7 @@ struct StremioManifest: Codable, Identifiable {
 enum ManifestResource: Codable {
     case simple(String)
     case detailed(ManifestResourceDetail)
-    
+
     init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
         if let stringValue = try? container.decode(String.self) {
@@ -55,21 +55,21 @@ enum ManifestResource: Codable {
             self = .detailed(detail)
         }
     }
-    
+
     func encode(to encoder: Encoder) throws {
         var container = encoder.singleValueContainer()
         switch self {
-        case .simple(let name):
+        case let .simple(name):
             try container.encode(name)
-        case .detailed(let detail):
+        case let .detailed(detail):
             try container.encode(detail)
         }
     }
-    
+
     var name: String {
         switch self {
-        case .simple(let name): return name
-        case .detailed(let detail): return detail.name
+        case let .simple(name): return name
+        case let .detailed(detail): return detail.name
         }
     }
 }
@@ -88,11 +88,11 @@ struct ManifestCatalog: Codable, Identifiable {
     let extra: [CatalogExtra]?
     let extraSupported: [String]?
     let extraRequired: [String]?
-    
+
     var displayName: String {
         name ?? id.capitalized
     }
-    
+
     /// Checks if this catalog supports search
     var supportsSearch: Bool {
         // Check extraSupported array first (more reliable)

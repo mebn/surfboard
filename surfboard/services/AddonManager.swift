@@ -11,13 +11,13 @@ import Foundation
 @MainActor
 class AddonManager: ObservableObject {
     static let shared = AddonManager()
-    
+
     @Published private(set) var addons: [StremioAddonService] = []
     @Published private(set) var isLoading = false
     @Published private(set) var isLoaded = false
-    
+
     private init() {}
-    
+
     /// Normalizes a URL for comparison (handles stremio:// protocol and trailing slashes)
     func normalizeUrl(_ url: String) -> String {
         var normalized = url.lowercased()
@@ -29,31 +29,31 @@ class AddonManager: ObservableObject {
         }
         return normalized
     }
-    
+
     /// Loads addons from bundle (Secrets.xcconfig) and optionally saved addon URLs
     /// - Parameter savedAddonUrls: Optional array of user-saved addon URLs
     func loadAddons(savedAddonUrls: [String] = []) async {
         isLoading = true
-        
+
         var urls: [URL] = []
         var seenNormalized = Set<String>()
-        
+
         #if DEBUG
-        // First, load from Secrets if in DEBUG mode
-        for urlString in Secrets.addonURLs {
-            var urlString = urlString
-            
-            if urlString.hasPrefix("stremio://") {
-                urlString = urlString.replacingOccurrences(of: "stremio://", with: "https://")
+            // First, load from Secrets if in DEBUG mode
+            for urlString in Secrets.addonURLs {
+                var urlString = urlString
+
+                if urlString.hasPrefix("stremio://") {
+                    urlString = urlString.replacingOccurrences(of: "stremio://", with: "https://")
+                }
+
+                let normalized = normalizeUrl(urlString)
+                if !seenNormalized.contains(normalized), let url = URL(string: urlString) {
+                    seenNormalized.insert(normalized)
+                    urls.append(url)
+                    print("Found bundle addon URL for: \(urlString)")
+                }
             }
-            
-            let normalized = normalizeUrl(urlString)
-            if !seenNormalized.contains(normalized), let url = URL(string: urlString) {
-                seenNormalized.insert(normalized)
-                urls.append(url)
-                print("Found bundle addon URL for: \(urlString)")
-            }
-        }
         #endif
 
         // Then add saved addon URLs, skipping duplicates
@@ -62,7 +62,7 @@ class AddonManager: ObservableObject {
             if urlString.hasPrefix("stremio://") {
                 urlString = urlString.replacingOccurrences(of: "stremio://", with: "https://")
             }
-            
+
             let normalized = normalizeUrl(urlString)
             if !seenNormalized.contains(normalized), let url = URL(string: urlString) {
                 seenNormalized.insert(normalized)
@@ -70,7 +70,7 @@ class AddonManager: ObservableObject {
                 print("Found saved addon URL: \(urlString)")
             }
         }
-        
+
         // Load all addon manifests
         var loadedAddons: [StremioAddonService] = []
         for url in urls {
@@ -83,31 +83,31 @@ class AddonManager: ObservableObject {
                 print("Failed to load addon from \(url): \(error)")
             }
         }
-        
+
         addons = loadedAddons
         isLoading = false
         isLoaded = true
         print("Total addons loaded: \(addons.count)")
     }
-    
+
     /// Returns addons that support a specific resource and type
     func addons(for resource: String, type: String) -> [StremioAddonService] {
         let matching = addons.filter { $0.supports(resource: resource, type: type) }
         print("Found \(matching.count) addons for resource '\(resource)' type '\(type)': \(matching.map { $0.name })")
         return matching
     }
-    
+
     /// Fetches all catalogs of a given type from all supporting addons
     func fetchCatalogs(type: String) async throws -> [(addon: StremioAddonService, items: [MediaItem])] {
         let catalogAddons = addons(for: "catalog", type: type)
         var results: [(addon: StremioAddonService, items: [MediaItem])] = []
-        
+
         for addon in catalogAddons {
             guard let catalogs = addon.manifest?.catalogs(for: type), !catalogs.isEmpty else {
                 print("No catalogs for type \(type) in addon \(addon.name)")
                 continue
             }
-            
+
             // Use the first catalog for this type
             if let firstCatalog = catalogs.first {
                 do {
@@ -120,14 +120,14 @@ class AddonManager: ObservableObject {
                 }
             }
         }
-        
+
         return results
     }
-    
+
     /// Fetches metadata from the first addon that supports it
     func fetchMeta(type: String, id: String) async throws -> MediaItem {
         let metaAddons = addons(for: "meta", type: type)
-        
+
         for addon in metaAddons {
             do {
                 return try await addon.fetchMeta(type: type, id: id)
@@ -136,15 +136,15 @@ class AddonManager: ObservableObject {
                 continue
             }
         }
-        
+
         throw StremioAddonError.noAddonFound
     }
-    
+
     /// Fetches streams from all addons that support it
     func fetchStreams(type: String, id: String) async throws -> [StremioStream] {
         let streamAddons = addons(for: "stream", type: type)
         var allStreams: [StremioStream] = []
-        
+
         for addon in streamAddons {
             do {
                 print("Fetching streams from \(addon.name) for \(type)/\(id)")
@@ -155,22 +155,22 @@ class AddonManager: ObservableObject {
                 print("Error fetching streams from \(addon.name): \(error)")
             }
         }
-        
+
         return allStreams
     }
-    
+
     /// Searches catalogs that support search
     func searchCatalogs(type: String, query: String) async throws -> [MediaItem] {
         let catalogAddons = addons(for: "catalog", type: type)
         var allResults: [MediaItem] = []
-        
+
         guard let encodedQuery = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
             return []
         }
-        
+
         for addon in catalogAddons {
             guard let catalogs = addon.manifest?.catalogs(for: type) else { continue }
-            
+
             // Find catalogs that support search
             for catalog in catalogs where catalog.supportsSearch {
                 do {
@@ -182,7 +182,7 @@ class AddonManager: ObservableObject {
                 }
             }
         }
-        
+
         // Remove duplicates based on ID
         var seen = Set<String>()
         return allResults.filter { item in

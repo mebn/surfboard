@@ -18,50 +18,50 @@ struct StremioStream: Codable, Identifiable, Hashable {
     let url: String?
     let infoHash: String?
     let fileIdx: Int?
-    
+
     // Sources (tracker URLs, DHT info)
     let sources: [String]?
-    
+
     // Behavior hints
     let behaviorHints: StreamBehaviorHints?
-    
+
     // Additional stream info (some addons provide these)
     let description: String?
     let subtitles: [Subtitle]?
-    
+
     // Stremio addon specific
     let externalUrl: String?
-    
+
     var id: String {
         infoHash ?? url ?? UUID().uuidString
     }
-    
+
     var displayTitle: String {
         title ?? name ?? "Unknown Source"
     }
-    
+
     var displayName: String {
         name ?? "Unknown"
     }
-    
+
     var filename: String? {
         behaviorHints?.filename
     }
-    
+
     var bingeGroup: String? {
         behaviorHints?.bingeGroup
     }
-    
+
     var magnetURL: String? {
         guard let infoHash = infoHash else { return nil }
         var magnet = "magnet:?xt=urn:btih:\(infoHash)"
-        
+
         if let filename = filename {
             if let encodedName = filename.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
                 magnet += "&dn=\(encodedName)"
             }
         }
-        
+
         if let sources = sources {
             for source in sources {
                 if source.hasPrefix("tracker:") {
@@ -72,10 +72,10 @@ struct StremioStream: Codable, Identifiable, Hashable {
                 }
             }
         }
-        
+
         return magnet
     }
-    
+
     var qualityBadge: String {
         let titleLower = (title ?? "").lowercased()
         if titleLower.contains("2160p") || titleLower.contains("4k") {
@@ -89,7 +89,7 @@ struct StremioStream: Codable, Identifiable, Hashable {
         }
         return ""
     }
-    
+
     var resolution: StreamResolution {
         let titleLower = (title ?? "").lowercased()
         if titleLower.contains("2160p") || titleLower.contains("4k") {
@@ -103,7 +103,7 @@ struct StremioStream: Codable, Identifiable, Hashable {
         }
         return .unknown
     }
-    
+
     var hdrType: HDRType {
         let titleLower = (title ?? "").lowercased() + (name ?? "").lowercased()
         if titleLower.contains("dolby vision") || titleLower.contains("dv") {
@@ -118,8 +118,7 @@ struct StremioStream: Codable, Identifiable, Hashable {
         }
         return .sdr
     }
-    
-    
+
     var videoCodec: String? {
         let titleLower = (title ?? "").lowercased() + (filename ?? "").lowercased()
         if titleLower.contains("hevc") || titleLower.contains("x265") || titleLower.contains("h.265") || titleLower.contains("h265") {
@@ -131,7 +130,7 @@ struct StremioStream: Codable, Identifiable, Hashable {
         }
         return nil
     }
-    
+
     var audioCodec: String? {
         let titleLower = (title ?? "").lowercased() + (filename ?? "").lowercased()
         if titleLower.contains("truehd") && titleLower.contains("atmos") {
@@ -149,17 +148,17 @@ struct StremioStream: Codable, Identifiable, Hashable {
         }
         return nil
     }
-    
+
     var isRemux: Bool {
         let titleLower = (title ?? "").lowercased() + (filename ?? "").lowercased()
         return titleLower.contains("remux")
     }
-    
+
     var isWebDL: Bool {
         let titleLower = (title ?? "").lowercased() + (filename ?? "").lowercased()
         return titleLower.contains("web-dl") || titleLower.contains("webdl")
     }
-    
+
     var isBluRay: Bool {
         let titleLower = (title ?? "").lowercased() + (filename ?? "").lowercased()
         return titleLower.contains("bluray") || titleLower.contains("blu-ray") || titleLower.contains("bdrip")
@@ -172,7 +171,7 @@ struct StreamBehaviorHints: Codable, Hashable {
     let videoHash: String?
     let videoSize: Int64?
     let notWebReady: Bool?
-    
+
     // Additional hints some addons provide
     let countryWhitelist: [String]?
     let proxyHeaders: ProxyHeaders?
@@ -195,7 +194,7 @@ enum StreamResolution: String, Comparable {
     case hd = "720p"
     case fullHD = "1080p"
     case uhd4k = "4K"
-    
+
     var sortOrder: Int {
         switch self {
         case .unknown: return 0
@@ -205,7 +204,7 @@ enum StreamResolution: String, Comparable {
         case .uhd4k: return 4
         }
     }
-    
+
     static func < (lhs: StreamResolution, rhs: StreamResolution) -> Bool {
         lhs.sortOrder < rhs.sortOrder
     }
