@@ -93,7 +93,7 @@ struct SingleMediaView: View {
                 return "Play"
             }
 
-            let episodeText = "S\(ep.season)E\(ep.episodeNumber)"
+            let episodeText = String(format: "S%02dE%02d", ep.season, ep.episodeNumber)
             return isNewEpisode ? "Play \(episodeText)" : "Continue Watching \(episodeText)"
         }
     }
@@ -154,6 +154,25 @@ struct SingleMediaView: View {
         try? modelContext.save()
     }
 
+    // MARK: - Episode Helpers
+
+    private func subtitleFor(_ episode: Episode) -> String {
+        var parts = [String(format: "S%02dE%02d", episode.season, episode.episodeNumber)]
+        if let releaseDate = episode.formattedReleasedDate {
+            parts.append(releaseDate)
+        }
+        return parts.joined(separator: " • ")
+    }
+
+    private func progressFor(_ episode: Episode) -> EpisodeProgress? {
+        record?.progressForEpisode(episodeId: episode.id)
+    }
+
+    private func deleteProgress(for episode: Episode) {
+        record?.clearProgress(episodeId: episode.id)
+        try? modelContext.save()
+    }
+
     @ViewBuilder
     private func mediaContent(item: MediaItem) -> some View {
         ZStack {
@@ -174,17 +193,23 @@ struct SingleMediaView: View {
                             Text(item.description ?? "No Description.")
                                 .lineLimit(3)
 
-                            HStack(spacing: 12) {
-                                if let field = item.imdbRating, field != "" {
-                                    Text("\(field), ")
+                            HStack(spacing: 8) {
+                                if let rating = item.imdbRating, !rating.isEmpty {
+                                    Text(rating)
                                 }
 
-                                if let field = item.year, field != "" {
-                                    Text("\(field), ")
+                                if let year = item.year, !year.isEmpty {
+                                    if item.imdbRating != nil && !item.imdbRating!.isEmpty {
+                                        Text("•")
+                                    }
+                                    Text(year)
                                 }
 
-                                if let field = item.runtime, field != "" {
-                                    Text(field)
+                                if let runtime = item.runtime, !runtime.isEmpty {
+                                    if (item.imdbRating != nil && !item.imdbRating!.isEmpty) || (item.year != nil && !item.year!.isEmpty) {
+                                        Text("•")
+                                    }
+                                    Text(runtime)
                                 }
                             }
                             .lineLimit(1)
@@ -244,13 +269,20 @@ struct SingleMediaView: View {
                     if item.isSeries {
                         VStack(alignment: .leading) {
                             ScrollView(.horizontal) {
-                                HStack(spacing: 40) {
+                                HStack(alignment: .top, spacing: 40) {
                                     ForEach(episodesForSelectedSeason(item: item)) { episode in
-                                        EpisodeCard(
-                                            item: item,
-                                            episode: episode,
-                                            isWatched: record?.isEpisodeWatched(episodeId: episode.id) ?? false,
-                                            progress: record?.progressForEpisode(episodeId: episode.id)
+                                        let progress = progressFor(episode)
+                                        MediaCard(
+                                            imageURL: episode.thumbnailURL,
+                                            title: episode.name ?? "Episode \(episode.episodeNumber)",
+                                            destination: .sources(item: item, episode: episode),
+                                            orientation: .landscape,
+                                            subtitle: subtitleFor(episode),
+                                            description: episode.displayDescription,
+                                            progress: progress,
+                                            onDelete: progress != nil ? {
+                                                deleteProgress(for: episode)
+                                            } : nil
                                         )
                                         .containerRelativeFrame(.horizontal, count: 5, spacing: 40)
                                     }
@@ -288,75 +320,6 @@ struct SingleMediaView: View {
         guard let currentIndex = seasons.firstIndex(of: selectedSeason),
               currentIndex < seasons.count - 1 else { return nil }
         return seasons[currentIndex + 1]
-    }
-}
-
-struct EpisodeCard: View {
-    let item: MediaItem
-    let episode: Episode
-    var isWatched: Bool = false
-    var progress: EpisodeProgress? = nil
-
-    /// Check if episode is in progress (started but not completed)
-    private var isInProgress: Bool {
-        guard let progress = progress else { return false }
-        return progress.currentTime > 0 && !progress.isCompleted
-    }
-
-    var body: some View {
-        NavigationLink(destination: SourcesView(item: item, episode: episode)) {
-            CachedImage(
-                url: episode.thumbnailURL,
-                aspectRatio: 340 / 200
-            )
-            .overlay {
-                if isWatched {
-                    // Watched overlay
-                    ZStack {
-                        Color.black.opacity(0.5)
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 50))
-                            .foregroundColor(.white)
-                    }
-                } else if isInProgress, let progress = progress {
-                    // In-progress overlay
-                    ZStack(alignment: .bottom) {
-                        Color.black.opacity(0.3)
-
-                        VStack {
-                            Spacer()
-                            Text(progress.timeRemainingText)
-                                .font(.caption)
-                                .fontWeight(.semibold)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .background(.ultraThinMaterial)
-                                .clipShape(Capsule())
-                                .padding(.bottom, 12)
-                        }
-                    }
-                }
-            }
-            .hoverEffect(.highlight)
-
-            HStack(spacing: 0) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(episode.name ?? "Episode \(episode.episodeNumber)")
-                        .lineLimit(1)
-
-                    Group {
-                        Text("Episode \(episode.episodeNumber)")
-                        Text(episode.formattedReleasedDate ?? "")
-                    }
-                    .foregroundColor(.secondary)
-                    .lineLimit(1)
-                }
-
-                Spacer()
-            }
-        }
-        .buttonStyle(.borderless)
-        .buttonBorderShape(.roundedRectangle(radius: 64))
     }
 }
 

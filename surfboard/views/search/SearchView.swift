@@ -5,6 +5,7 @@
 //  Created by Marcus Nilszén on 2025-12-25.
 //
 
+import SwiftData
 import SwiftUI
 
 struct SearchView: View {
@@ -78,14 +79,45 @@ struct SearchSection: View {
     let title: String
     let items: [MediaItem]
 
+    @Query private var allRecords: [MediaRecord]
+
+    private func recordFor(_ item: MediaItem) -> MediaRecord? {
+        allRecords.first { $0.id == item.id }
+    }
+
+    private func progressFor(_ item: MediaItem) -> EpisodeProgress? {
+        recordFor(item)?.progressForEpisode(episodeId: nil)
+    }
+
+    private func subtitleFor(_ item: MediaItem) -> String? {
+        var parts: [String] = []
+        if let rating = item.imdbRating, !rating.isEmpty {
+            parts.append(rating)
+        }
+        if let year = item.year, !year.isEmpty {
+            parts.append(year)
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " • ")
+    }
+
     var body: some View {
         VStack(alignment: .leading) {
             Section(title) {
                 ScrollView(.horizontal) {
                     HStack(spacing: 40) {
                         ForEach(items) { item in
-                            MediaCard(item: item)
-                                .containerRelativeFrame(.horizontal, count: 6, spacing: 40)
+                            MediaCard(
+                                imageURL: item.posterURL,
+                                title: item.name,
+                                destination: .singleMedia(itemId: item.id, itemType: item.type),
+                                orientation: .portrait,
+                                subtitle: subtitleFor(item),
+                                progress: progressFor(item),
+                                onDelete: progressFor(item) != nil ? {
+                                    recordFor(item)?.clearProgress(episodeId: nil)
+                                } : nil
+                            )
+                            .containerRelativeFrame(.horizontal, count: 6, spacing: 40)
                         }
                     }
                 }

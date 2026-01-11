@@ -39,11 +39,11 @@ struct LibraryView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 40) {
                         if !favoriteMovies.isEmpty {
-                            FavoriteSection(title: "Favorite Movies", items: favoriteMovies.map { $0.metadata })
+                            FavoriteSection(title: "Favorite Movies", items: favoriteMovies)
                         }
 
                         if !favoriteTVShows.isEmpty {
-                            FavoriteSection(title: "Favorite TV Shows", items: favoriteTVShows.map { $0.metadata })
+                            FavoriteSection(title: "Favorite TV Shows", items: favoriteTVShows)
                         }
                     }
                 }
@@ -87,16 +87,41 @@ struct LibraryView: View {
 
 struct FavoriteSection: View {
     let title: String
-    let items: [MediaItem]
+    let items: [(record: MediaRecord, metadata: MediaItem)]
+
+    private func progressFor(_ record: MediaRecord) -> EpisodeProgress? {
+        record.progressForEpisode(episodeId: nil)
+    }
+
+    private func subtitleFor(_ item: MediaItem) -> String? {
+        var parts: [String] = []
+        if let rating = item.imdbRating, !rating.isEmpty {
+            parts.append(rating)
+        }
+        if let year = item.year, !year.isEmpty {
+            parts.append(year)
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " • ")
+    }
 
     var body: some View {
         VStack(alignment: .leading) {
             Section(title) {
                 ScrollView(.horizontal) {
                     HStack(spacing: 40) {
-                        ForEach(items) { item in
-                            MediaCard(item: item)
-                                .containerRelativeFrame(.horizontal, count: 6, spacing: 40)
+                        ForEach(items, id: \.record.id) { item in
+                            MediaCard(
+                                imageURL: item.metadata.posterURL,
+                                title: item.metadata.name,
+                                destination: .singleMedia(itemId: item.metadata.id, itemType: item.metadata.type),
+                                orientation: .portrait,
+                                subtitle: subtitleFor(item.metadata),
+                                progress: progressFor(item.record),
+                                onDelete: progressFor(item.record) != nil ? {
+                                    item.record.clearProgress(episodeId: nil)
+                                } : nil
+                            )
+                            .containerRelativeFrame(.horizontal, count: 6, spacing: 40)
                         }
                     }
                 }

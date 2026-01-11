@@ -66,7 +66,7 @@ struct VideoPlayerView: View {
 
     private var displayName: String {
         if let episode = episode {
-            return "\(mediaItem.name) - S\(episode.season) E\(episode.episodeNumber)"
+            return "\(mediaItem.name) • S\(episode.season) E\(episode.episodeNumber)"
         }
         return mediaItem.name
     }
@@ -443,7 +443,7 @@ struct VideoPlayerView: View {
     }
 
     private func speedLabel(_ speed: Float) -> String {
-        speed == 1.0 ? "Normal" : "\(String(format: "%.2g", speed))x"
+        "\(String(format: "%.2g", speed))x"
     }
 
     // MARK: - Controls Visibility
