@@ -32,6 +32,7 @@ struct VideoPlayerView: View {
     @State private var selectedSubtitleTrackId: Int32?
     @State private var hasAppliedDefaults = false
     @State private var isMenuOpen = false
+    @State private var subtitleParts: [SubtitlePart] = []
 
     @State private var selectedAudio: Int?
     @State private var selectedSubtitle: Int?
@@ -65,6 +66,9 @@ struct VideoPlayerView: View {
                     .shadow(color: .black.opacity(0.5), radius: 10)
             }
 
+            // Subtitle overlay
+            subtitleOverlay
+
             controlsOverlay
                 .opacity(controlsOpacity)
         }
@@ -83,6 +87,9 @@ struct VideoPlayerView: View {
         .toolbar(.hidden, for: .tabBar)
         .onPlayPauseCommand { togglePlayPause() }
         .onExitCommand { dismiss() }
+        .onReceive(playerCoordinator.subtitleModel.$parts) { parts in
+            subtitleParts = parts
+        }
     }
 
     // MARK: - Controls Overlay
@@ -218,6 +225,27 @@ struct VideoPlayerView: View {
         )
     }
 
+    private var subtitleOverlay: some View {
+        VStack {
+            Spacer()
+            ForEach(subtitleParts) { part in
+                if let text = part.text {
+                    Text(AttributedString(text))
+                        .font(.title2)
+                        .foregroundColor(.white)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 40)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color.black.opacity(0.6))
+                        )
+                }
+            }
+            .padding(.bottom, controlsOpacity > 0 ? 200 : 80)
+        }
+    }
+
     private func menuButtonLabel(icon: String, focus: FocusableElement) -> some View {
         ZStack {
             Circle()
@@ -239,10 +267,14 @@ struct VideoPlayerView: View {
     private func selectSubtitleTrack(_ track: MediaPlayerTrack) {
         player?.select(track: track)
         selectedSubtitleTrackId = track.trackID
+        // Update subtitleModel to display the selected subtitle
+        if let subtitleInfo = track as? (any SubtitleInfo) {
+            playerCoordinator.subtitleModel.selectedSubtitleInfo = subtitleInfo
+        }
     }
 
     private func disableSubtitles() {
-        subtitleTracks.filter(\.isEnabled).forEach { player?.select(track: $0) }
+        playerCoordinator.subtitleModel.selectedSubtitleInfo = nil
         selectedSubtitleTrackId = nil
     }
 
