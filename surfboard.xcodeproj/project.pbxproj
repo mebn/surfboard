@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		0EBC00A82EFED6A100DF3B43 /* KSPlayer in Frameworks */ = {isa = PBXBuildFile; productRef = 0EBC00A72EFED6A100DF3B43 /* KSPlayer */; };
+		0EBC00AA2EFED6A100DF3B43 /* VLCKitSPM in Frameworks */ = {isa = PBXBuildFile; productRef = 0EBC00A92EFED6A100DF3B43 /* VLCKitSPM */; };
 		0EE3F8482F0EE4CC00085999 /* Kingfisher in Frameworks */ = {isa = PBXBuildFile; productRef = 0EE3F8472F0EE4CC00085999 /* Kingfisher */; };
 /* End PBXBuildFile section */
 
@@ -15,33 +15,9 @@
 		0EBCFFF92EFDA85700DF3B43 /* surfboard.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = surfboard.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
-/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		0EBC007F2EFED1B700DF3B43 /* Exceptions for "surfboard" folder in "surfboard" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				secrets.swift.templete,
-			);
-			target = 0EBCFFF82EFDA85700DF3B43 /* surfboard */;
-		};
-/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
-
-/* Begin PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
-		0EDE77DA2F0480D60087E778 /* Exceptions for "surfboard" folder in "Compile Sources" phase from "surfboard" target */ = {
-			isa = PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet;
-			buildPhase = 0EBCFFF52EFDA85700DF3B43 /* Sources */;
-			membershipExceptions = (
-				secrets.swift.templete,
-			);
-		};
-/* End PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
-
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		0EBCFFFB2EFDA85700DF3B43 /* surfboard */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				0EBC007F2EFED1B700DF3B43 /* Exceptions for "surfboard" folder in "surfboard" target */,
-				0EDE77DA2F0480D60087E778 /* Exceptions for "surfboard" folder in "Compile Sources" phase from "surfboard" target */,
-			);
 			path = surfboard;
 			sourceTree = "<group>";
 		};
@@ -53,7 +29,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				0EE3F8482F0EE4CC00085999 /* Kingfisher in Frameworks */,
-				0EBC00A82EFED6A100DF3B43 /* KSPlayer in Frameworks */,
+				0EBC00AA2EFED6A100DF3B43 /* VLCKitSPM in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -96,7 +72,7 @@
 			);
 			name = surfboard;
 			packageProductDependencies = (
-				0EBC00A72EFED6A100DF3B43 /* KSPlayer */,
+				0EBC00A92EFED6A100DF3B43 /* VLCKitSPM */,
 				0EE3F8472F0EE4CC00085999 /* Kingfisher */,
 			);
 			productName = surfboard;
@@ -128,7 +104,7 @@
 			mainGroup = 0EBCFFF02EFDA85700DF3B43;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				0EBC00A62EFED6A100DF3B43 /* XCRemoteSwiftPackageReference "KSPlayer" */,
+				0EBC00A62EFED6A100DF3B43 /* XCRemoteSwiftPackageReference "vlckit-spm" */,
 				0EE3F8462F0EE4CC00085999 /* XCRemoteSwiftPackageReference "Kingfisher" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -359,12 +335,12 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		0EBC00A62EFED6A100DF3B43 /* XCRemoteSwiftPackageReference "KSPlayer" */ = {
+		0EBC00A62EFED6A100DF3B43 /* XCRemoteSwiftPackageReference "vlckit-spm" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/kingslay/KSPlayer.git";
+			repositoryURL = "https://github.com/tylerjonesio/vlckit-spm";
 			requirement = {
 				kind = upToNextMajorVersion;
-				minimumVersion = 2.3.4;
+				minimumVersion = 3.6.0;
 			};
 		};
 		0EE3F8462F0EE4CC00085999 /* XCRemoteSwiftPackageReference "Kingfisher" */ = {
@@ -378,10 +354,10 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		0EBC00A72EFED6A100DF3B43 /* KSPlayer */ = {
+		0EBC00A92EFED6A100DF3B43 /* VLCKitSPM */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 0EBC00A62EFED6A100DF3B43 /* XCRemoteSwiftPackageReference "KSPlayer" */;
-			productName = KSPlayer;
+			package = 0EBC00A62EFED6A100DF3B43 /* XCRemoteSwiftPackageReference "vlckit-spm" */;
+			productName = VLCKitSPM;
 		};
 		0EE3F8472F0EE4CC00085999 /* Kingfisher */ = {
 			isa = XCSwiftPackageProductDependency;

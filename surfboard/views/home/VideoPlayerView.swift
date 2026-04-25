@@ -5,9 +5,10 @@
 //  Created by Marcus Nilszén on 2025-12-26.
 //
 
-import KSPlayer
 import SwiftData
 import SwiftUI
+import UIKit
+import VLCKitSPM
 
 struct VideoPlayerView: View {
     let url: URL
@@ -18,7 +19,7 @@ struct VideoPlayerView: View {
     @Environment(\.dismiss) private var dismiss
     @Query private var allRecords: [MediaRecord]
     @Query private var settingsArray: [AppSettings]
-    @StateObject private var playerCoordinator = KSVideoPlayer.Coordinator()
+    @StateObject private var playerCoordinator = VLCPlayerCoordinator()
 
     @State private var progressTimer: Timer?
     @State private var hideControlsTimer: Timer?
@@ -26,13 +27,14 @@ struct VideoPlayerView: View {
     @State private var isPlaying = false
     @State private var isLoading = true
     @State private var currentSpeed: Float = 1.0
-    @State private var audioTracks: [MediaPlayerTrack] = []
-    @State private var subtitleTracks: [MediaPlayerTrack] = []
+    @State private var audioTracks: [VLCTrack] = []
+    @State private var subtitleTracks: [VLCTrack] = []
     @State private var selectedAudioTrackId: Int32?
     @State private var selectedSubtitleTrackId: Int32?
     @State private var hasAppliedDefaults = false
+    @State private var hasRestoredProgress = false
     @State private var isMenuOpen = false
-    @State private var subtitleParts: [SubtitlePart] = []
+    @State private var lastProgressSaveDate = Date.distantPast
 
     @State private var selectedAudio: Int?
     @State private var selectedSubtitle: Int?
@@ -45,15 +47,12 @@ struct VideoPlayerView: View {
 
     private var record: MediaRecord? { allRecords.first { $0.id == mediaItem.id } }
     private var settings: AppSettings? { settingsArray.first }
-    private var player: (any MediaPlayerProtocol)? { playerCoordinator.playerLayer?.player }
+    private var player: VLCMediaPlayer { playerCoordinator.player }
 
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            KSVideoPlayer(coordinator: playerCoordinator, url: url, options: KSOptions())
-                .onStateChanged {
-                    handlePlayerState($1, playerLayer: $0)
-                }
+            VLCPlayerView(coordinator: playerCoordinator, url: url)
 
             if isLoading {
                 ProgressView().progressViewStyle(CircularProgressViewStyle(tint: .white))
@@ -66,15 +65,17 @@ struct VideoPlayerView: View {
                     .shadow(color: .black.opacity(0.5), radius: 10)
             }
 
-            // Subtitle overlay
-            subtitleOverlay
-
             controlsOverlay
                 .opacity(controlsOpacity)
         }
+        .onAppear {
+            playerCoordinator.configure(url: url)
+            startProgressTimer()
+        }
         .onDisappear {
-            stopTimers()
             saveProgress()
+            stopTimers()
+            playerCoordinator.stop()
         }
         .onChange(of: focusedElement) { _, focus in
             if focus == .seekbar {
@@ -87,8 +88,8 @@ struct VideoPlayerView: View {
         .toolbar(.hidden, for: .tabBar)
         .onPlayPauseCommand { togglePlayPause() }
         .onExitCommand { dismiss() }
-        .onReceive(playerCoordinator.subtitleModel.$parts) { parts in
-            subtitleParts = parts
+        .onReceive(playerCoordinator.$state) { state in
+            handlePlayerState(state)
         }
     }
 
@@ -199,8 +200,8 @@ struct VideoPlayerView: View {
     }
 
     private var seekbarView: some View {
-        let currentTime = playerCoordinator.playerLayer?.player.currentPlaybackTime ?? 0
-        let duration = playerCoordinator.playerLayer?.player.duration ?? 0
+        let currentTime = playerCoordinator.currentTime
+        let duration = playerCoordinator.duration
 
         return (
             VStack(spacing: 8) {
@@ -225,27 +226,6 @@ struct VideoPlayerView: View {
         )
     }
 
-    private var subtitleOverlay: some View {
-        VStack {
-            Spacer()
-            ForEach(subtitleParts) { part in
-                if let text = part.text {
-                    Text(AttributedString(text))
-                        .font(.title2)
-                        .foregroundColor(.white)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 40)
-                        .padding(.vertical, 8)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(Color.black.opacity(0.6))
-                        )
-                }
-            }
-            .padding(.bottom, controlsOpacity > 0 ? 200 : 80)
-        }
-    }
-
     private func menuButtonLabel(icon: String, focus: FocusableElement) -> some View {
         ZStack {
             Circle()
@@ -259,34 +239,33 @@ struct VideoPlayerView: View {
 
     // MARK: - Track Selection
 
-    private func selectAudioTrack(_ track: MediaPlayerTrack) {
-        player?.select(track: track)
+    private func selectAudioTrack(_ track: VLCTrack) {
+        player.currentAudioTrackIndex = track.id
         selectedAudioTrackId = track.trackID
     }
 
-    private func selectSubtitleTrack(_ track: MediaPlayerTrack) {
-        player?.select(track: track)
+    private func selectSubtitleTrack(_ track: VLCTrack) {
+        player.currentVideoSubTitleIndex = track.id
         selectedSubtitleTrackId = track.trackID
-        // Update subtitleModel to display the selected subtitle
-        if let subtitleInfo = track as? (any SubtitleInfo) {
-            playerCoordinator.subtitleModel.selectedSubtitleInfo = subtitleInfo
-        }
     }
 
     private func disableSubtitles() {
-        playerCoordinator.subtitleModel.selectedSubtitleInfo = nil
+        player.currentVideoSubTitleIndex = -1
         selectedSubtitleTrackId = nil
     }
 
     private func loadTracks() {
-        guard let player = player else { return }
-        audioTracks = player.tracks(mediaType: .audio)
-        subtitleTracks = player.tracks(mediaType: .subtitle)
+        audioTracks = player.audioTracks
+        subtitleTracks = player.subtitleTracks
+        let selectedAudio = player.currentAudioTrackIndex
+        let selectedSubtitle = player.currentVideoSubTitleIndex
+        selectedAudioTrackId = selectedAudio >= 0 ? selectedAudio : nil
+        selectedSubtitleTrackId = selectedSubtitle >= 0 ? selectedSubtitle : nil
     }
 
     private func applyDefaultSettings() {
-        guard !hasAppliedDefaults, let player = player else { return }
-        let audio = player.tracks(mediaType: .audio)
+        guard !hasAppliedDefaults else { return }
+        let audio = player.audioTracks
         guard !audio.isEmpty else { return }
         hasAppliedDefaults = true
 
@@ -300,47 +279,56 @@ struct VideoPlayerView: View {
         if let lang = settings?.preferredSubtitleLanguage {
             if lang == "none" {
                 disableSubtitles()
-            } else if let track = player.tracks(mediaType: .subtitle).first(where: { trackMatchesLanguage($0, language: lang) }) {
+            } else if let track = player.subtitleTracks.first(where: { trackMatchesLanguage($0, language: lang) }) {
                 selectSubtitleTrack(track)
             }
         }
     }
 
-    private func trackMatchesLanguage(_ track: MediaPlayerTrack, language: String) -> Bool {
+    private func trackMatchesLanguage(_ track: VLCTrack, language: String) -> Bool {
         let name = track.name.lowercased()
-        let lang = track.language?.lowercased() ?? ""
         let code = language.lowercased()
-        if lang == code || lang.hasPrefix(code) { return true }
+        if name == code || name.hasPrefix(code) { return true }
         if let langName = LanguageOption.audioLanguages.first(where: { $0.id == code })?.name.lowercased(),
-           name.contains(langName) || lang.contains(langName) { return true }
+           name.contains(langName) { return true }
         return false
     }
 
     // MARK: - Player State
 
-    private func handlePlayerState(_ state: KSPlayerState, playerLayer: KSPlayerLayer) {
+    private func handlePlayerState(_ state: VLCMediaPlayerState) {
         switch state {
-        case .readyToPlay:
+        case .playing:
             isLoading = false
             isPlaying = true
             showControls(hideAfter: 1.0)
             loadTracks()
             applyDefaultSettings()
-            if let rec = record, let prog = rec.progressForEpisode(episodeId: episode?.id), !prog.isCompleted {
-                playerLayer.seek(time: prog.currentTime, autoPlay: true) { _ in }
+            if !hasRestoredProgress {
+                hasRestoredProgress = true
+                if let rec = record,
+                   let prog = rec.progressForEpisode(episodeId: episode?.id),
+                   !prog.isCompleted
+                {
+                    playerCoordinator.seek(to: prog.currentTime)
+                }
             }
 
-        case .buffering:
+        case .opening, .buffering:
             isLoading = true
 
-        case .bufferFinished:
+        case .esAdded:
             isLoading = false
+            loadTracks()
+            applyDefaultSettings()
 
-        case .paused where isPlaying:
+        case .paused:
+            isLoading = false
             isPlaying = false
             showControls(persistent: true)
 
-        case .playedToTheEnd:
+        case .ended, .stopped, .error:
+            isLoading = false
             isPlaying = false
 
         default:
@@ -351,24 +339,25 @@ struct VideoPlayerView: View {
     // MARK: - Playback Controls
 
     private func togglePlayPause() {
-        guard let layer = playerCoordinator.playerLayer else { return }
         if isPlaying {
-            layer.pause()
+            player.pause()
             isPlaying = false
             showControls(persistent: true)
         } else {
-            layer.play()
+            player.play()
             isPlaying = true
             showControls(hideAfter: 1.0)
         }
     }
 
     private func skip(seconds: Double) {
-        guard let layer = playerCoordinator.playerLayer else { return }
-        let currentTime = layer.player.currentPlaybackTime
-        let duration = layer.player.duration
+        let currentTime = playerCoordinator.currentTime
+        let duration = playerCoordinator.duration
         let newTime = max(0, min(currentTime + seconds, duration))
-        layer.seek(time: newTime, autoPlay: isPlaying) { _ in }
+        playerCoordinator.seek(to: newTime)
+        if isPlaying {
+            player.play()
+        }
     }
 
     private func handleSeekbarMove(_ direction: MoveCommandDirection) {
@@ -383,7 +372,7 @@ struct VideoPlayerView: View {
     }
 
     private func setPlaybackSpeed(_ speed: Float) {
-        player?.playbackRate = speed
+        player.rate = speed
         currentSpeed = speed
     }
 
@@ -403,6 +392,19 @@ struct VideoPlayerView: View {
 
     // MARK: - Timers
 
+    private func startProgressTimer() {
+        progressTimer?.invalidate()
+        progressTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
+            Task { @MainActor in
+                playerCoordinator.refreshTimes()
+                if Date().timeIntervalSince(lastProgressSaveDate) >= 5 {
+                    saveProgress()
+                    lastProgressSaveDate = Date()
+                }
+            }
+        }
+    }
+
     private func stopTimers() {
         [progressTimer, hideControlsTimer].forEach { $0?.invalidate() }
         progressTimer = nil
@@ -419,8 +421,8 @@ struct VideoPlayerView: View {
     // MARK: - Progress Saving
 
     private func saveProgress() {
-        let currentTime = playerCoordinator.playerLayer?.player.currentPlaybackTime ?? 0
-        let duration = playerCoordinator.playerLayer?.player.duration ?? 0
+        let currentTime = playerCoordinator.currentTime
+        let duration = playerCoordinator.duration
 
         guard duration > 0, currentTime >= 10 else { return }
 
@@ -441,5 +443,130 @@ struct VideoPlayerView: View {
             streamUrl: url.absoluteString
         )
         try? modelContext.save()
+    }
+}
+
+private struct VLCTrack: Identifiable, Hashable {
+    let id: Int32
+    let name: String
+
+    var trackID: Int32 { id }
+}
+
+private struct VLCPlayerView: UIViewRepresentable {
+    @ObservedObject var coordinator: VLCPlayerCoordinator
+    let url: URL
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.backgroundColor = .black
+        coordinator.player.drawable = view
+        coordinator.configure(url: url)
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {
+        coordinator.player.drawable = uiView
+        coordinator.configure(url: url)
+    }
+}
+
+@MainActor
+private final class VLCPlayerCoordinator: NSObject, ObservableObject {
+    let player: VLCMediaPlayer
+
+    @Published var state: VLCMediaPlayerState = .stopped
+    @Published var currentTime: Double = 0
+    @Published var duration: Double = 0
+
+    private var configuredURL: URL?
+
+    override init() {
+        player = VLCMediaPlayer(options: [
+            "--network-caching=1500",
+            "--http-reconnect"
+        ])
+        super.init()
+        player.delegate = self
+    }
+
+    func configure(url: URL) {
+        guard configuredURL != url else { return }
+        configuredURL = url
+        let media = VLCMedia(url: url)
+        media.addOptions([
+            "network-caching": 1500,
+            "http-reconnect": true
+        ])
+        player.media = media
+        player.play()
+    }
+
+    func seek(to seconds: Double) {
+        let milliseconds = Int32(max(0, seconds * 1000))
+        player.time = VLCTime(int: milliseconds)
+        refreshTimes()
+    }
+
+    func refreshTimes() {
+        currentTime = seconds(from: player.time)
+
+        if let length = player.media?.length, seconds(from: length) > 0 {
+            duration = seconds(from: length)
+        } else if player.position > 0, currentTime > 0 {
+            duration = currentTime / Double(player.position)
+        }
+    }
+
+    func stop() {
+        player.stop()
+    }
+
+    private func seconds(from time: VLCTime?) -> Double {
+        guard let time else { return 0 }
+        let milliseconds = time.intValue
+        guard milliseconds > 0 else { return 0 }
+        return Double(milliseconds) / 1000.0
+    }
+}
+
+extension VLCPlayerCoordinator: VLCMediaPlayerDelegate {
+    nonisolated func mediaPlayerStateChanged(_ aNotification: Notification) {
+        Task { @MainActor in
+            state = player.state
+            refreshTimes()
+        }
+    }
+
+    nonisolated func mediaPlayerTimeChanged(_ aNotification: Notification) {
+        Task { @MainActor in
+            refreshTimes()
+        }
+    }
+}
+
+private extension VLCMediaPlayer {
+    var audioTracks: [VLCTrack] {
+        makeTracks(names: audioTrackNames, indexes: audioTrackIndexes)
+            .filter { $0.id >= 0 }
+    }
+
+    var subtitleTracks: [VLCTrack] {
+        makeTracks(names: videoSubTitlesNames, indexes: videoSubTitlesIndexes)
+            .filter { $0.id >= 0 }
+    }
+
+    func makeTracks(names: [Any], indexes: [Any]) -> [VLCTrack] {
+        zip(names, indexes).compactMap { name, index in
+            guard let id = trackID(from: index) else { return nil }
+            return VLCTrack(id: id, name: String(describing: name))
+        }
+    }
+
+    func trackID(from value: Any) -> Int32? {
+        if let int = value as? Int32 { return int }
+        if let int = value as? Int { return Int32(int) }
+        if let number = value as? NSNumber { return number.int32Value }
+        return nil
     }
 }
