@@ -19,7 +19,7 @@ struct SingleMediaView: View {
 
     @State private var item: MediaItem?
     @State private var isLoading = true
-    @State private var selectedSeason: Int = 1
+    @FocusState private var focusedEpisodeId: String?
 
     /// Get or create MediaRecord for this item
     private var record: MediaRecord? {
@@ -72,7 +72,7 @@ struct SingleMediaView: View {
         return (sortedEpisodes.last, false, true)
     }
 
-    /// The episode to pass to SourcesView for the play button (nil for movies)
+    /// The episode to pass to the player for the play button (nil for movies)
     private func playButtonEpisode(item: MediaItem) -> Episode? {
         guard item.isSeries else { return nil }
         return nextEpisodeToWatch(item: item).episode
@@ -129,12 +129,6 @@ struct SingleMediaView: View {
                 item = try await metadataCache.get(id: itemId, type: itemType)
             }
 
-            if let loadedItem = item {
-                let seasons = loadedItem.seasons.filter { $0 != 0 }.sorted()
-                if let firstSeason = seasons.first {
-                    selectedSeason = firstSeason
-                }
-            }
         } catch {
             print("Error loading item: \(error)")
         }
@@ -173,8 +167,128 @@ struct SingleMediaView: View {
         try? modelContext.save()
     }
 
+    private var lastFocusedEpisodeKey: String {
+        "SingleMediaView.lastFocusedEpisode.\(itemId)"
+    }
+
+    private func rememberEpisode(_ episode: Episode) {
+        UserDefaults.standard.set(episode.id, forKey: lastFocusedEpisodeKey)
+    }
+
+    private func lastFocusedEpisode(in item: MediaItem) -> Episode? {
+        guard let episodeId = UserDefaults.standard.string(forKey: lastFocusedEpisodeKey) else { return nil }
+        return item.videos?.first { $0.id == episodeId }
+    }
+
+    private func seasonAnchor(for season: Int) -> String {
+        "\(itemId)-season-\(season)"
+    }
+
+    private func restoreSeriesFocus(item: MediaItem, proxy: ScrollViewProxy) {
+        guard let episode = lastFocusedEpisode(in: item) else { return }
+
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(100))
+            proxy.scrollTo(seasonAnchor(for: episode.season), anchor: .center)
+            focusedEpisodeId = episode.id
+        }
+    }
+
     @ViewBuilder
     private func mediaContent(item: MediaItem) -> some View {
+        if item.isSeries {
+            seriesContent(item: item)
+        } else {
+            movieContent(item: item)
+        }
+    }
+
+    @ViewBuilder
+    private func seriesContent(item: MediaItem) -> some View {
+        ScrollViewReader { verticalProxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 36) {
+                    HStack(alignment: .center, spacing: 24) {
+                        NavigationLink(destination: VideoPlayerView(mediaItem: item, episode: playButtonEpisode(item: item))) {
+                            Text(playButtonText(item: item))
+                        }
+                        .buttonBorderShape(.capsule)
+                        .buttonStyle(.borderedProminent)
+                        .tint(.blue)
+
+                        Button(action: toggleFavorite) {
+                            Image(systemName: isFavorited ? "star.fill" : "star")
+                                .foregroundColor(isFavorited ? .yellow : .white)
+                        }
+                        .buttonBorderShape(.capsule)
+                    }
+
+                    ForEach(availableSeasons(item: item), id: \.self) { season in
+                        VStack(alignment: .leading, spacing: 16) {
+                            Text("Season \(season)")
+                                .font(.title3)
+                                .fontWeight(.semibold)
+
+                            ScrollViewReader { horizontalProxy in
+                                ScrollView(.horizontal) {
+                                    HStack(alignment: .top, spacing: 40) {
+                                        ForEach(episodes(for: season, item: item)) { episode in
+                                            let progress = progressFor(episode)
+                                            MediaCard(
+                                                imageURL: episode.thumbnailURL,
+                                                title: episode.name ?? "Episode \(episode.episodeNumber)",
+                                                destination: .sources(item: item, episode: episode),
+                                                orientation: .landscape,
+                                                subtitle: subtitleFor(episode),
+                                                description: episode.displayDescription,
+                                                progress: progress,
+                                                onDelete: progress != nil ? {
+                                                    deleteProgress(for: episode)
+                                                } : nil
+                                            )
+                                            .focused($focusedEpisodeId, equals: episode.id)
+                                            .id(episode.id)
+                                            .onChange(of: focusedEpisodeId) { _, newValue in
+                                                if newValue == episode.id {
+                                                    rememberEpisode(episode)
+                                                }
+                                            }
+                                            .simultaneousGesture(
+                                                TapGesture().onEnded {
+                                                    rememberEpisode(episode)
+                                                }
+                                            )
+                                            .containerRelativeFrame(.horizontal, count: 5, spacing: 40)
+                                        }
+                                    }
+                                }
+                                .onAppear {
+                                    if lastFocusedEpisode(in: item)?.season == season,
+                                       let episodeId = lastFocusedEpisode(in: item)?.id
+                                    {
+                                        Task { @MainActor in
+                                            try? await Task.sleep(for: .milliseconds(100))
+                                            horizontalProxy.scrollTo(episodeId, anchor: .center)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        .id(seasonAnchor(for: season))
+                        .scrollClipDisabled()
+                    }
+                }
+                .padding(.top, 32)
+            }
+            .onAppear {
+                restoreSeriesFocus(item: item, proxy: verticalProxy)
+            }
+        }
+        .scrollClipDisabled()
+    }
+
+    @ViewBuilder
+    private func movieContent(item: MediaItem) -> some View {
         ZStack {
             CachedBackgroundImage(url: item.backgroundURL)
                 .ignoresSafeArea()
@@ -238,7 +352,7 @@ struct SingleMediaView: View {
                 VStack(alignment: .leading, spacing: 24) {
                     HStack(alignment: .center) {
                         HStack(alignment: .center, spacing: 24) {
-                            NavigationLink(destination: SourcesView(item: item, episode: playButtonEpisode(item: item))) {
+                            NavigationLink(destination: VideoPlayerView(mediaItem: item, episode: playButtonEpisode(item: item))) {
                                 Text(playButtonText(item: item))
                             }
                             .buttonBorderShape(.capsule)
@@ -253,43 +367,6 @@ struct SingleMediaView: View {
                         }
 
                         Spacer()
-
-                        // Season button
-                        if item.isSeries && !availableSeasons(item: item).isEmpty {
-                            Picker("Season", selection: $selectedSeason) {
-                                ForEach(availableSeasons(item: item), id: \.self) { season in
-                                    Text("Season \(season)").tag(season)
-                                }
-                            }
-                            .pickerStyle(.menu)
-                            .buttonBorderShape(.capsule)
-                        }
-                    }
-
-                    if item.isSeries {
-                        VStack(alignment: .leading) {
-                            ScrollView(.horizontal) {
-                                HStack(alignment: .top, spacing: 40) {
-                                    ForEach(episodesForSelectedSeason(item: item)) { episode in
-                                        let progress = progressFor(episode)
-                                        MediaCard(
-                                            imageURL: episode.thumbnailURL,
-                                            title: episode.name ?? "Episode \(episode.episodeNumber)",
-                                            destination: .sources(item: item, episode: episode),
-                                            orientation: .landscape,
-                                            subtitle: subtitleFor(episode),
-                                            description: episode.displayDescription,
-                                            progress: progress,
-                                            onDelete: progress != nil ? {
-                                                deleteProgress(for: episode)
-                                            } : nil
-                                        )
-                                        .containerRelativeFrame(.horizontal, count: 5, spacing: 40)
-                                    }
-                                }
-                            }
-                        }
-                        .scrollClipDisabled()
                     }
                 }
             }
@@ -297,29 +374,13 @@ struct SingleMediaView: View {
         }
     }
 
-    private func episodesForSelectedSeason(item: MediaItem) -> [Episode] {
-        item.episodesBySeason[selectedSeason]?.sorted { $0.episodeNumber < $1.episodeNumber } ?? []
+    private func episodes(for season: Int, item: MediaItem) -> [Episode] {
+        item.episodesBySeason[season]?.sorted { $0.episodeNumber < $1.episodeNumber } ?? []
     }
 
     /// Returns available seasons, excluding season 0
     private func availableSeasons(item: MediaItem) -> [Int] {
         item.seasons.filter { $0 != 0 }.sorted()
-    }
-
-    /// Returns the previous season if available, nil otherwise
-    private func previousSeason(item: MediaItem) -> Int? {
-        let seasons = availableSeasons(item: item)
-        guard let currentIndex = seasons.firstIndex(of: selectedSeason),
-              currentIndex > 0 else { return nil }
-        return seasons[currentIndex - 1]
-    }
-
-    /// Returns the next season if available, nil otherwise
-    private func nextSeason(item: MediaItem) -> Int? {
-        let seasons = availableSeasons(item: item)
-        guard let currentIndex = seasons.firstIndex(of: selectedSeason),
-              currentIndex < seasons.count - 1 else { return nil }
-        return seasons[currentIndex + 1]
     }
 }
 

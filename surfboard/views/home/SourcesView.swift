@@ -11,10 +11,12 @@ import SwiftUI
 struct SourcesView: View {
     let item: MediaItem
     let episode: Episode?
+    let autoPlayFirstSource: Bool
 
-    init(item: MediaItem, episode: Episode? = nil) {
+    init(item: MediaItem, episode: Episode? = nil, autoPlayFirstSource: Bool = true) {
         self.item = item
         self.episode = episode
+        self.autoPlayFirstSource = autoPlayFirstSource
     }
 
     @StateObject private var addonManager = AddonManager.shared
@@ -22,6 +24,7 @@ struct SourcesView: View {
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var selectedStream: StremioStream?
+    @State private var hasAutoPlayed = false
 
     var body: some View {
         Group {
@@ -54,9 +57,10 @@ struct SourcesView: View {
         }
         .navigationDestination(item: $selectedStream) { stream in
             if let urlString = stream.url, let url = URL(string: urlString) {
-                VideoPlayerView(url: url, mediaItem: item, episode: episode)
+                VideoPlayerView(url: url, mediaItem: item, episode: episode, streams: streams)
             }
         }
+        .navigationTitle(navigationTitle)
         .task {
             await loadStreams()
         }
@@ -88,6 +92,10 @@ struct SourcesView: View {
                 type: item.type,
                 id: streamId
             )
+            if autoPlayFirstSource, !hasAutoPlayed, let firstPlayableStream = streams.first(where: { $0.url != nil }) {
+                hasAutoPlayed = true
+                selectedStream = firstPlayableStream
+            }
         } catch {
             errorMessage = error.localizedDescription
         }

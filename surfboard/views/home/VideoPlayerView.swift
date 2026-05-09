@@ -11,16 +11,27 @@ import UIKit
 import VLCKitSPM
 
 struct VideoPlayerView: View {
-    let url: URL
+    let url: URL?
     let mediaItem: MediaItem
     let episode: Episode?
+
+    init(url: URL? = nil, mediaItem: MediaItem, episode: Episode?, streams: [StremioStream] = []) {
+        self.url = url
+        self.mediaItem = mediaItem
+        self.episode = episode
+        _currentURL = State(initialValue: url)
+        _streams = State(initialValue: streams)
+        _selectedSourceId = State(initialValue: streams.first { $0.url == url?.absoluteString }?.id)
+    }
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Query private var allRecords: [MediaRecord]
     @Query private var settingsArray: [AppSettings]
     @StateObject private var playerCoordinator = VLCPlayerCoordinator()
+    @StateObject private var addonManager = AddonManager.shared
 
+    @State private var currentURL: URL?
     @State private var progressTimer: Timer?
     @State private var hideControlsTimer: Timer?
     @State private var controlsOpacity: Double = 1.0
@@ -34,13 +45,19 @@ struct VideoPlayerView: View {
     @State private var hasAppliedDefaults = false
     @State private var hasRestoredProgress = false
     @State private var isMenuOpen = false
+    @State private var isSourceListOpen = false
+    @State private var streams: [StremioStream]
+    @State private var isLoadingSources = false
+    @State private var sourceErrorMessage: String?
+    @State private var selectedSourceId: String?
     @State private var lastProgressSaveDate = Date.distantPast
+    @State private var hasLoadedInitialSource = false
 
     @State private var selectedAudio: Int?
     @State private var selectedSubtitle: Int?
     @State private var selectedPlaybackSpeed: Int?
 
-    enum FocusableElement: Hashable { case seekbar, audioButton, subtitleButton, speedButton }
+    enum FocusableElement: Hashable { case seekbar, sourceButton, audioButton, subtitleButton, speedButton }
     @FocusState private var focusedElement: FocusableElement?
 
     private let speedOptions: [Float] = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
@@ -52,10 +69,22 @@ struct VideoPlayerView: View {
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            VLCPlayerView(coordinator: playerCoordinator, url: url)
+            if let currentURL {
+                VLCPlayerView(coordinator: playerCoordinator, url: currentURL)
+            }
 
             if isLoading {
                 ProgressView().progressViewStyle(CircularProgressViewStyle(tint: .white))
+            }
+
+            if let sourceErrorMessage, currentURL == nil {
+                VStack(spacing: 16) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.largeTitle)
+                    Text(sourceErrorMessage)
+                        .font(.headline)
+                }
+                .foregroundColor(.white)
             }
 
             if !isPlaying && !isLoading {
@@ -67,9 +96,19 @@ struct VideoPlayerView: View {
 
             controlsOverlay
                 .opacity(controlsOpacity)
+
+            if isSourceListOpen {
+                sourceListOverlay
+            }
         }
         .onAppear {
-            playerCoordinator.configure(url: url)
+            if let currentURL {
+                playerCoordinator.configure(url: currentURL)
+            } else {
+                Task {
+                    await loadInitialSource()
+                }
+            }
             startProgressTimer()
         }
         .onDisappear {
@@ -121,6 +160,14 @@ struct VideoPlayerView: View {
                 seekbarView
 
                 HStack(spacing: 16) {
+                    Button {
+                        openSourceList()
+                    } label: {
+                        menuButtonLabel(icon: "list.bullet", focus: .sourceButton)
+                    }
+                    .buttonStyle(.plain)
+                    .focused($focusedElement, equals: .sourceButton)
+
                     // audio
                     Menu {
                         if audioTracks.isEmpty {
@@ -197,6 +244,84 @@ struct VideoPlayerView: View {
         .background(
             LinearGradient(colors: [.black.opacity(0.7), .clear, .clear, .black.opacity(0.7)], startPoint: .top, endPoint: .bottom)
         )
+    }
+
+    private var sourceListOverlay: some View {
+        HStack {
+            Spacer()
+
+            VStack(alignment: .leading, spacing: 24) {
+                HStack {
+                    Text("Sources")
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white)
+
+                    Spacer()
+
+                    Button {
+                        closeSourceList()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.headline)
+                    }
+                    .buttonStyle(.bordered)
+                }
+
+                if isLoadingSources {
+                    HStack(spacing: 12) {
+                        ProgressView()
+                        Text("Loading sources...")
+                            .foregroundColor(.secondary)
+                    }
+                } else if let sourceErrorMessage {
+                    Label(sourceErrorMessage, systemImage: "exclamationmark.triangle")
+                        .foregroundColor(.secondary)
+                } else if streams.allSatisfy({ $0.url == nil }) {
+                    Label("No playable sources", systemImage: "film.stack")
+                        .foregroundColor(.secondary)
+                } else {
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 12) {
+                            ForEach(streams.filter { $0.url != nil }) { stream in
+                                Button {
+                                    selectSource(stream)
+                                } label: {
+                                    HStack(spacing: 16) {
+                                        VStack(alignment: .leading, spacing: 6) {
+                                            Text(stream.displayName)
+                                                .font(.headline)
+                                                .foregroundColor(.white)
+
+                                            Text(stream.displayTitle)
+                                                .font(.subheadline)
+                                                .foregroundColor(.secondary)
+                                                .lineLimit(2)
+                                        }
+
+                                        Spacer()
+
+                                        if selectedSourceId == stream.id || stream.url == currentURL?.absoluteString {
+                                            Image(systemName: "checkmark")
+                                                .foregroundColor(.white)
+                                        }
+                                    }
+                                    .padding(16)
+                                    .background(.white.opacity(0.12))
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(32)
+            .frame(width: 560)
+            .frame(maxHeight: .infinity)
+            .background(.black.opacity(0.86))
+        }
+        .ignoresSafeArea()
     }
 
     private var seekbarView: some View {
@@ -366,7 +491,7 @@ struct VideoPlayerView: View {
         switch direction {
         case .left: skip(seconds: -10)
         case .right: skip(seconds: 10)
-        case .down: focusedElement = .audioButton
+        case .down: focusedElement = .sourceButton
         default: break
         }
     }
@@ -387,6 +512,87 @@ struct VideoPlayerView: View {
                 guard isPlaying, !isMenuOpen else { return }
                 withAnimation(.easeInOut(duration: 0.5)) { controlsOpacity = 0.0 }
             }
+        }
+    }
+
+    // MARK: - Source Selection
+
+    private var streamId: String {
+        episode?.id ?? mediaItem.id
+    }
+
+    private func openSourceList() {
+        isSourceListOpen = true
+        isMenuOpen = true
+        showControls(persistent: true)
+
+        guard streams.isEmpty else { return }
+        Task {
+            await loadSources()
+        }
+    }
+
+    private func closeSourceList() {
+        isSourceListOpen = false
+        isMenuOpen = false
+        showControls(hideAfter: 1.0)
+    }
+
+    private func loadSources() async {
+        isLoadingSources = true
+        sourceErrorMessage = nil
+
+        if !addonManager.isLoaded {
+            await addonManager.loadAddons()
+        }
+
+        do {
+            streams = try await addonManager.fetchStreams(
+                type: mediaItem.type,
+                id: streamId
+            )
+        } catch {
+            sourceErrorMessage = error.localizedDescription
+        }
+
+        isLoadingSources = false
+    }
+
+    private func loadInitialSource() async {
+        guard !hasLoadedInitialSource else { return }
+        hasLoadedInitialSource = true
+        isLoading = true
+
+        await loadSources()
+
+        guard let firstPlayableStream = streams.first(where: { $0.url != nil }) else {
+            sourceErrorMessage = sourceErrorMessage ?? "No playable sources"
+            isLoading = false
+            return
+        }
+
+        selectSource(firstPlayableStream, shouldSaveCurrentProgress: false, shouldCloseSourceList: false)
+    }
+
+    private func selectSource(
+        _ stream: StremioStream,
+        shouldSaveCurrentProgress: Bool = true,
+        shouldCloseSourceList: Bool = true
+    ) {
+        guard let urlString = stream.url, let sourceURL = URL(string: urlString) else { return }
+
+        if shouldSaveCurrentProgress {
+            saveProgress()
+        }
+        currentURL = sourceURL
+        selectedSourceId = stream.id
+        isLoading = true
+        isPlaying = false
+        hasAppliedDefaults = false
+        hasRestoredProgress = false
+        playerCoordinator.configure(url: sourceURL)
+        if shouldCloseSourceList {
+            closeSourceList()
         }
     }
 
@@ -434,13 +640,15 @@ struct VideoPlayerView: View {
 
         let isComplete = currentTime / duration >= 0.9
 
+        guard let currentURL else { return }
+
         mediaRecord.updateProgress(
             episodeId: episode?.id,
             season: episode?.season,
             episode: episode?.episodeNumber,
             currentTime: isComplete ? duration : currentTime,
             totalDuration: duration,
-            streamUrl: url.absoluteString
+            streamUrl: currentURL.absoluteString
         )
         try? modelContext.save()
     }

@@ -10,10 +10,16 @@ import SwiftUI
 
 struct HomeView: View {
     @StateObject private var addonManager = AddonManager.shared
+    @StateObject private var metadataCache = MediaMetadataCache.shared
 
     @State private var popularMovies: [MediaItem] = []
     @State private var popularTVShows: [MediaItem] = []
+    @State private var highlightedCard: HighlightedHomeCard?
+    @State private var highlightedDetails: MediaItem?
+    @State private var settledHighlightedCard: HighlightedHomeCard?
+    @State private var settledHighlightedDetails: MediaItem?
     @State private var isLoading = true
+    @FocusState private var focusedMediaId: String?
 
     var body: some View {
         if isLoading {
@@ -21,14 +27,90 @@ struct HomeView: View {
                 await loadContent()
             }
         } else {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 40) {
-                    ContinueWatchingSection()
-                    MediaSection(title: "Popular Movies", items: popularMovies)
-                    MediaSection(title: "Popular TV Shows", items: popularTVShows)
+            ZStack {
+                CachedBackgroundImage(url: highlightedBackgroundURL)
+                    .ignoresSafeArea()
+                    .overlay(Color.black.opacity(0.68))
+
+                VStack(alignment: .leading) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(highlightedTitle)
+                            .font(.largeTitle)
+                            .lineLimit(2)
+
+                        Text(highlightedMetadata)
+                            .foregroundStyle(.secondary)
+
+                        Text(highlightedDescription)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(5)
+                    }
+                    .frame(height: 300, alignment: .topLeading)
+                    .padding(.top, 50)
+
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 40) {
+                            ContinueWatchingSection(
+                                focusedMediaId: $focusedMediaId,
+                                onHighlight: highlight
+                            )
+
+                            MediaSection(
+                                title: "Popular Movies",
+                                items: popularMovies,
+                                focusedMediaId: $focusedMediaId,
+                                onHighlight: highlight
+                            )
+                            MediaSection(
+                                title: "Popular TV Shows",
+                                items: popularTVShows,
+                                focusedMediaId: $focusedMediaId,
+                                onHighlight: highlight
+                            )
+                        }
+                    }
+                    .padding(.bottom, 50)
                 }
             }
+            .task(id: highlightedCard?.item.id) {
+                await settleHighlightedCard()
+            }
         }
+    }
+
+    private var highlightedItem: MediaItem? {
+        highlightedDetails ?? highlightedCard?.item
+    }
+
+    private var highlightedBackgroundURL: URL? {
+        let backgroundItem = settledHighlightedDetails ?? settledHighlightedCard?.item ?? highlightedItem
+        return backgroundItem?.backgroundURL ?? backgroundItem?.posterURL
+    }
+
+    private var highlightedTitle: String {
+        highlightedCard?.titleOverride ?? highlightedItem?.name ?? ""
+    }
+
+    private var highlightedMetadata: String {
+        var parts: [String] = []
+        if let year = highlightedItem?.year, !year.isEmpty {
+            parts.append(year)
+        }
+        if let score = highlightedItem?.imdbRating, !score.isEmpty {
+            parts.append(score)
+        }
+        return parts.joined(separator: " | ")
+    }
+
+    private var highlightedDescription: String {
+        if let description = highlightedCard?.descriptionOverride, !description.isEmpty {
+            return description
+        }
+        if let description = highlightedItem?.description, !description.isEmpty {
+            return description
+        }
+        return ""
     }
 
     private func loadContent() async {
@@ -49,17 +131,87 @@ struct HomeView: View {
             if let firstSeriesCatalog = seriesResults.first {
                 popularTVShows = firstSeriesCatalog.items
             }
+
+            if highlightedCard == nil, let firstItem = popularMovies.first ?? popularTVShows.first {
+                highlight(firstItem)
+            }
         } catch {
             print("Error loading content: \(error)")
         }
 
         isLoading = false
     }
+
+    private func highlight(
+        _ item: MediaItem,
+        titleOverride: String? = nil,
+        descriptionOverride: String? = nil
+    ) {
+        if highlightedCard?.item.id == item.id,
+           highlightedCard?.titleOverride == titleOverride,
+           highlightedCard?.descriptionOverride == descriptionOverride
+        {
+            return
+        }
+
+        let isSameItem = highlightedCard?.item.id == item.id
+        highlightedCard = HighlightedHomeCard(
+            item: item,
+            titleOverride: titleOverride,
+            descriptionOverride: descriptionOverride
+        )
+
+        if !isSameItem {
+            highlightedDetails = nil
+        }
+    }
+
+    private func settleHighlightedCard() async {
+        guard let card = highlightedCard else { return }
+
+        try? await Task.sleep(for: .milliseconds(150))
+        guard !Task.isCancelled, isCurrentHighlight(card) else { return }
+
+        settledHighlightedCard = card
+
+        guard needsDetailedMetadata(card.item) else {
+            settledHighlightedDetails = nil
+            return
+        }
+
+        do {
+            let detailedItem = try await metadataCache.get(id: card.item.id, type: card.item.type)
+            if !Task.isCancelled, isCurrentHighlight(card) {
+                highlightedDetails = detailedItem
+                settledHighlightedDetails = detailedItem
+            }
+        } catch {
+            print("Failed to load highlighted metadata for \(card.item.id): \(error)")
+        }
+    }
+
+    private func isCurrentHighlight(_ card: HighlightedHomeCard) -> Bool {
+        highlightedCard?.item.id == card.item.id
+            && highlightedCard?.titleOverride == card.titleOverride
+            && highlightedCard?.descriptionOverride == card.descriptionOverride
+    }
+
+    private func needsDetailedMetadata(_ item: MediaItem) -> Bool {
+        item.background == nil || item.description == nil || item.year == nil || item.imdbRating == nil
+    }
+}
+
+private struct HighlightedHomeCard {
+    let item: MediaItem
+    let titleOverride: String?
+    let descriptionOverride: String?
 }
 
 struct MediaSection: View {
     let title: String
     let items: [MediaItem]
+    let focusedMediaId: FocusState<String?>.Binding
+    let onHighlight: (MediaItem, String?, String?) -> Void
 
     @Query private var allRecords: [MediaRecord]
 
@@ -82,24 +234,40 @@ struct MediaSection: View {
         return parts.isEmpty ? nil : parts.joined(separator: " • ")
     }
 
+    private func destination(for item: MediaItem) -> CardDestination {
+        if item.isMovie {
+            return .sources(item: item, episode: nil)
+        }
+        return .singleMedia(itemId: item.id, itemType: item.type)
+    }
+
     var body: some View {
         VStack(alignment: .leading) {
             Section(title) {
                 ScrollView(.horizontal) {
                     HStack(alignment: .top, spacing: 40) {
                         ForEach(items) { item in
+                            let focusId = "media-\(item.type)-\(item.id)"
+
                             MediaCard(
                                 imageURL: item.posterURL,
                                 title: item.name,
-                                destination: .singleMedia(itemId: item.id, itemType: item.type),
+                                destination: destination(for: item),
                                 orientation: .portrait,
                                 subtitle: subtitleFor(item),
+                                showsText: false,
                                 progress: progressFor(item),
                                 onDelete: progressFor(item) != nil ? {
                                     recordFor(item)?.clearProgress(episodeId: nil)
                                 } : nil
                             )
-                            .containerRelativeFrame(.horizontal, count: 6, spacing: 40)
+                            .focused(focusedMediaId, equals: focusId)
+                            .onChange(of: focusedMediaId.wrappedValue) { _, newValue in
+                                if newValue == focusId {
+                                    onHighlight(item, nil, nil)
+                                }
+                            }
+                            .containerRelativeFrame(.horizontal, count: 8, spacing: 40)
                         }
                     }
                 }
@@ -110,6 +278,9 @@ struct MediaSection: View {
 }
 
 struct ContinueWatchingSection: View {
+    let focusedMediaId: FocusState<String?>.Binding
+    let onHighlight: (MediaItem, String?, String?) -> Void
+
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \MediaRecord.updatedAt, order: .reverse) private var allRecords: [MediaRecord]
     @StateObject private var metadataCache = MediaMetadataCache.shared
@@ -163,6 +334,13 @@ struct ContinueWatchingSection: View {
         }
     }
 
+    private func fallbackDestination(for item: MediaItem) -> CardDestination {
+        if item.isMovie {
+            return .sources(item: item, episode: nil)
+        }
+        return .singleMedia(itemId: item.id, itemType: item.type)
+    }
+
     var body: some View {
         if !continueWatchingRecords.isEmpty {
             VStack(alignment: .leading) {
@@ -185,19 +363,28 @@ struct ContinueWatchingSection: View {
                                 ForEach(loadedItems, id: \.record.id) { item in
                                     let ep = episode(for: item.record, metadata: item.metadata)
                                     let streamUrl = item.record.mostRecentProgress?.streamUrl.flatMap { URL(string: $0) }
+                                    let displayTitle = displayTitle(for: item.record, metadata: item.metadata)
+                                    let focusId = "continue-\(item.record.id)"
 
                                     MediaCard(
                                         imageURL: imageURL(for: item.record, metadata: item.metadata),
-                                        title: displayTitle(for: item.record, metadata: item.metadata),
+                                        title: displayTitle,
                                         destination: streamUrl != nil
                                             ? .videoPlayer(url: streamUrl!, mediaItem: item.metadata, episode: ep)
-                                            : .singleMedia(itemId: item.metadata.id, itemType: item.metadata.type),
+                                            : fallbackDestination(for: item.metadata),
                                         orientation: .landscape,
+                                        showsText: false,
                                         progress: progressFor(item.record),
                                         onDelete: {
                                             deleteProgress(for: item.record)
                                         }
                                     )
+                                    .focused(focusedMediaId, equals: focusId)
+                                    .onChange(of: focusedMediaId.wrappedValue) { _, newValue in
+                                        if newValue == focusId {
+                                            onHighlight(item.metadata, displayTitle, ep?.displayDescription)
+                                        }
+                                    }
                                     .containerRelativeFrame(.horizontal, count: 5, spacing: 40)
                                 }
                             }

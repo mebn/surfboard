@@ -41,6 +41,7 @@ struct MediaCard: View {
     // Optional display
     var subtitle: String? = nil
     var description: String? = nil
+    var showsText: Bool = true
 
     // Progress tracking
     var progress: EpisodeProgress? = nil
@@ -63,7 +64,7 @@ struct MediaCard: View {
         case let .singleMedia(itemId, itemType):
             SingleMediaView(itemId: itemId, itemType: itemType)
         case let .sources(item, episode):
-            SourcesView(item: item, episode: episode)
+            VideoPlayerView(mediaItem: item, episode: episode)
         case let .videoPlayer(url, mediaItem, episode):
             VideoPlayerView(url: url, mediaItem: mediaItem, episode: episode)
         }
@@ -99,26 +100,28 @@ struct MediaCard: View {
             }
             .hoverEffect(.highlight)
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text(title)
-                    .lineLimit(1)
-
-                if let subtitle = subtitle {
-                    Text(subtitle)
-                        .foregroundColor(.secondary)
+            if showsText {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(title)
                         .lineLimit(1)
-                }
 
-                if orientation == .landscape {
-                    Text(description ?? " ")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .lineLimit(2)
-                } else if let description = description {
-                    Text(description)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .lineLimit(2)
+                    if let subtitle = subtitle {
+                        Text(subtitle)
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
+
+                    if orientation == .landscape {
+                        Text(description ?? " ")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .lineLimit(2)
+                    } else if let description = description {
+                        Text(description)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .lineLimit(2)
+                    }
                 }
             }
         }
